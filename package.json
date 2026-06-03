@@ -1,0 +1,18 @@
+{
+  "name": "caffeine-sugar-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "jsdom": "^29.1.1",
+    "puppeteer": "^25.1.0"
+  }
+}
