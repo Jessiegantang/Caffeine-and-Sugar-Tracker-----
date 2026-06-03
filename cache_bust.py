@@ -9,7 +9,6 @@ with open(filepath, 'r', encoding='utf-8') as f:
 # Add a cache buster to the stylesheet link
 version = int(time.time())
 html = re.sub(r'href="/style.css[^"]*"', f'href="/style.css?v={version}"', html)
-# Also try without the leading slash just in case
 html = re.sub(r'href="style.css[^"]*"', f'href="style.css?v={version}"', html)
 
 with open(filepath, 'w', encoding='utf-8') as f:

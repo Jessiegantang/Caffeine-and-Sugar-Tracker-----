@@ -82,7 +82,8 @@ body {
 
 /* Container */
 .container {
-  max-width: 1400px;
+  width: 100%;
+  max-width: 1200px;
   margin: 0 auto;
   position: relative;
   z-index: 1;
@@ -90,6 +91,7 @@ body {
 
 /* Main Content Wrapper */
 .main-content {
+  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -1136,7 +1138,7 @@ header {
 .database-full-width {
   position: relative;
   width: 100%;
-  max-width: 1400px !important;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0;
 }
