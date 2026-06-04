@@ -1,6 +1,42 @@
 import { state } from '../state.js';
 import { fetchChatHistoryApi, sendChatMessageApi } from '../api.js';
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function appendParsedIntake(parsedIntake) {
+  const container = document.getElementById('chat-history');
+  if (!container || !parsedIntake || parsedIntake.intent !== 'log_drink') return;
+
+  const missing = parsedIntake.missing_fields || [];
+  const statusText = missing.length
+    ? `Missing: ${missing.join(', ')}`
+    : 'Ready to fill drink form';
+
+  const card = document.createElement('div');
+  card.className = 'chat-msg assistant';
+  card.innerHTML = `
+    <span class="chat-avatar">AI</span>
+    <div class="chat-bubble assistant-bubble">
+      <strong>Structured intake JSON</strong>
+      <pre class="chat-json">${escapeHtml(JSON.stringify(parsedIntake, null, 2))}</pre>
+      <div class="chat-parse-status">${escapeHtml(statusText)}</div>
+    </div>
+  `;
+  container.appendChild(card);
+  container.scrollTop = container.scrollHeight;
+
+  window.dispatchEvent(new CustomEvent('drinkmind:intake-parsed', {
+    detail: parsedIntake
+  }));
+}
+
 export async function fetchChatHistory() {
   try {
     const data = await fetchChatHistoryApi(state.selectedDate);
@@ -79,8 +115,9 @@ export async function handleSendMessage() {
   container.scrollTop = container.scrollHeight;
 
   try {
-    await sendChatMessageApi(state.selectedDate, message);
+    const data = await sendChatMessageApi(state.selectedDate, message);
     await fetchChatHistory();
+    appendParsedIntake(data.parsed_intake);
   } catch (e) {
     console.error('Chat error', e);
     alert('发送失败，请检查网络');

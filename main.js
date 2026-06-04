@@ -54,9 +54,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   setDefaultTimes();
   setupEventListeners();
   initDatabasePanel(() => renderHotDrinks());
+  setupMemoryDebugApi();
   renderHotDrinks();
   renderApp();
 });
+
+function setupMemoryDebugApi() {
+  window.DrinkMindMemory = {
+    list: () => api.fetchUserPreferencesApi(),
+    clear: () => api.clearUserPreferencesApi()
+  };
+  window.DrinkMindPlans = {
+    create: (goal, date = state.selectedDate) => api.createHealthPlanApi(date, goal),
+    active: () => api.fetchActiveHealthPlanApi(),
+    refresh: (date = state.selectedDate) => api.refreshActiveHealthPlanApi(date)
+  };
+}
 
 // Load from backend and fallback to local storage
 async function loadInitialData() {
@@ -239,6 +252,9 @@ function setupEventListeners() {
       handleSendMessage();
     }
   });
+  window.addEventListener('drinkmind:intake-parsed', (e) => {
+    applyParsedIntakeToForm(e.detail);
+  });
 
 }
 
@@ -270,6 +286,29 @@ function applyDrinkDataToForm(data) {
   setTimeout(() => {
     formSection.style.borderColor = 'var(--border-color)';
   }, 500);
+}
+
+function applyParsedIntakeToForm(parsedIntake) {
+  if (!parsedIntake || parsedIntake.intent !== 'log_drink') return;
+  if (parsedIntake.missing_fields && parsedIntake.missing_fields.length > 0) return;
+
+  applyDrinkDataToForm({
+    brand: parsedIntake.brand || '',
+    name: parsedIntake.name,
+    type: parsedIntake.type || 'coffee',
+    sugar: parsedIntake.sugar || 'unknown',
+    volume: parsedIntake.volume || 500
+  });
+
+  elements.inputDate.value = state.selectedDate;
+  if (parsedIntake.time === 'now') {
+    const current = getCurrentTimeString();
+    elements.inputStartTime.value = current;
+    elements.inputEndTime.value = current;
+  } else if (/^\d{2}:\d{2}$/.test(parsedIntake.time || '')) {
+    elements.inputStartTime.value = parsedIntake.time;
+    elements.inputEndTime.value = parsedIntake.time;
+  }
 }
 
 // ==========================================
@@ -504,6 +543,57 @@ function renderDailyPanel() {
   fetchDailyAgentInsights(state.selectedDate);
 }
 
+function formatConfidence(value) {
+  const confidence = Number(value ?? 1);
+  return `${Math.round(confidence * 100)}%`;
+}
+
+function formatOptionalMeta(label, value) {
+  if (value === undefined || value === null || value === '') return '';
+  return `<span class="explain-chip">${label}: ${value}</span>`;
+}
+
+function renderReasoningItems(reasoning) {
+  if (!reasoning) return '';
+  try {
+    const reasons = typeof reasoning === 'string' ? JSON.parse(reasoning) : reasoning;
+    const list = Array.isArray(reasons) ? reasons : [String(reasons)];
+    return list.map(r => `<li>${r}</li>`).join('');
+  } catch(e) {
+    return `<li>${reasoning}</li>`;
+  }
+}
+
+function renderExplainability(log) {
+  const hasExplainability = log.data_source || log.estimation_method || log.reasoning;
+  if (!hasExplainability) return '';
+
+  const retrievalScore = log.retrieval_score !== undefined && log.retrieval_score !== null
+    ? Number(log.retrieval_score).toFixed(3)
+    : null;
+
+  return `
+    <div class="log-explainability">
+      <div class="explain-header">
+        <span>Nutrition pipeline</span>
+        ${log.confidence !== undefined ? `<strong>${formatConfidence(log.confidence)}</strong>` : ''}
+      </div>
+      <div class="explain-chips">
+        ${formatOptionalMeta('source', log.data_source)}
+        ${formatOptionalMeta('method', log.estimation_method)}
+        ${formatOptionalMeta('knowledge', log.matched_knowledge_id)}
+        ${formatOptionalMeta('retrieval', retrievalScore)}
+        ${formatOptionalMeta('trace', log.agent_trace_id)}
+      </div>
+      ${log.reasoning ? `
+        <ul class="explain-reasoning">
+          ${renderReasoningItems(log.reasoning)}
+        </ul>
+      ` : ''}
+    </div>
+  `;
+}
+
 // Render Daily Logs
 function renderDailyLogs(dateLogs) {
   elements.logsCount.textContent = dateLogs.length;
@@ -539,20 +629,7 @@ function renderDailyLogs(dateLogs) {
             <div class="log-time-range">
               ⏰ 饮用时间：${log.startTime} - ${log.endTime} (${log.volume}ml | ${sugarText})
             </div>
-            ${log.data_source ? `<div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">来源: ${log.data_source} (可信度 ${log.confidence || 1.0})</div>` : ''}
-            ${log.reasoning ? `
-              <div class="log-reasoning" style="margin-top: 8px; font-size: 0.7rem; color: #8b5cf6; background: #f3f4f6; padding: 6px; border-radius: 4px; border-left: 2px solid #8b5cf6;">
-                <div style="font-weight: 600; margin-bottom: 3px;">🧠 后端 AI 推断链路:</div>
-                <ul style="margin: 0; padding-left: 14px;">
-                  ${(() => {
-                    try {
-                      const reasons = typeof log.reasoning === 'string' ? JSON.parse(log.reasoning) : log.reasoning;
-                      return reasons.map(r => `<li>${r}</li>`).join('');
-                    } catch(e) { return `<li>${log.reasoning}</li>`; }
-                  })()}
-                </ul>
-              </div>
-            ` : ''}
+            ${renderExplainability(log)}
           </div>
         </div>
         

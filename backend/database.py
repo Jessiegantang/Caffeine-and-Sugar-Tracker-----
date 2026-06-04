@@ -26,6 +26,10 @@ class DrinkLog(Base):
     data_source = Column(String, default='用户录入')
     confidence = Column(Float, default=1.0)
     reasoning = Column(String, nullable=True)
+    estimation_method = Column(String, nullable=True)
+    matched_knowledge_id = Column(String, nullable=True)
+    retrieval_score = Column(Float, nullable=True)
+    agent_trace_id = Column(String, nullable=True)
 
 import datetime
 
@@ -80,6 +84,22 @@ class UserPreference(Base):
     value = Column(String)
     updated_at = Column(String, default=lambda: datetime.datetime.now().isoformat())
 
+class AgentTrace(Base):
+    __tablename__ = 'agent_traces'
+
+    id = Column(String, primary_key=True, index=True)
+    created_at = Column(String, default=lambda: datetime.datetime.now().isoformat(), index=True)
+    intent = Column(String, nullable=True)
+    user_input = Column(String, nullable=True)
+    agents_called = Column(String, nullable=True)
+    tools_used = Column(String, nullable=True)
+    retrieved_docs = Column(String, nullable=True)
+    model_name = Column(String, nullable=True)
+    latency_ms = Column(Float, nullable=True)
+    confidence = Column(Float, nullable=True)
+    final_action = Column(String, nullable=True)
+    error = Column(String, nullable=True)
+
 DATABASE_URL = "sqlite:///./drinks.db"
 
 engine = create_engine(
@@ -108,6 +128,18 @@ def auto_migrate_db():
             if 'reasoning' not in columns:
                 conn.execute(text("ALTER TABLE drink_logs ADD COLUMN reasoning VARCHAR"))
                 print("Migrated DB: Added 'reasoning' column.")
+            if 'estimation_method' not in columns:
+                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN estimation_method VARCHAR"))
+                print("Migrated DB: Added 'estimation_method' column.")
+            if 'matched_knowledge_id' not in columns:
+                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN matched_knowledge_id VARCHAR"))
+                print("Migrated DB: Added 'matched_knowledge_id' column.")
+            if 'retrieval_score' not in columns:
+                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN retrieval_score FLOAT"))
+                print("Migrated DB: Added 'retrieval_score' column.")
+            if 'agent_trace_id' not in columns:
+                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN agent_trace_id VARCHAR"))
+                print("Migrated DB: Added 'agent_trace_id' column.")
             conn.commit()
     except Exception as e:
         print(f"Auto-migration failed: {e}")

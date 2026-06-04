@@ -77,3 +77,51 @@ export async function sendChatMessageApi(date, message) {
   if (!response.ok) throw new Error('Failed to send chat message');
   return response.json();
 }
+
+export async function parseIntakeApi(date, message) {
+  const response = await fetch(`${API_BASE}/api/agent/parse_intake`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, message })
+  });
+  if (!response.ok) throw new Error('Failed to parse intake');
+  return response.json();
+}
+
+export async function fetchUserPreferencesApi() {
+  const response = await fetch(`${API_BASE}/api/user/preferences`);
+  if (!response.ok) throw new Error('Failed to fetch user preferences');
+  return response.json();
+}
+
+export async function clearUserPreferencesApi() {
+  const response = await fetch(`${API_BASE}/api/user/preferences`, {
+    method: 'DELETE'
+  });
+  if (!response.ok) throw new Error('Failed to clear user preferences');
+  return response.json();
+}
+
+export async function createHealthPlanApi(date, goal) {
+  const response = await fetch(`${API_BASE}/api/health/plans`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, goal })
+  });
+  if (!response.ok) throw new Error('Failed to create health plan');
+  return response.json();
+}
+
+export async function fetchActiveHealthPlanApi() {
+  const response = await fetch(`${API_BASE}/api/health/plans/active`);
+  if (!response.ok) throw new Error('Failed to fetch active health plan');
+  return response.json();
+}
+
+export async function refreshActiveHealthPlanApi(date) {
+  const response = await fetch(`${API_BASE}/api/health/plans/active/progress?date=${date}`, {
+    method: 'POST'
+  });
+  if (!response.ok) throw new Error('Failed to refresh health plan');
+  return response.json();
+}

@@ -6,8 +6,8 @@ langchain_openai
 pydantic
 python-dotenv
 sqlalchemy
-d u c k d u c k g o - s e a r c h  
- l a n g c h a i n - c o m m u n i t y  
+duckduckgo-search
+langchain-community
 chromadb
 tiktoken
 langchain-chroma

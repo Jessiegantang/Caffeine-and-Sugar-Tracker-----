@@ -1,5 +1,7 @@
 import os
 import json
+import re
+import uuid
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -61,6 +63,206 @@ def delete_chroma_document(kb_id):
         pass
 
 
+class IntakeParseResult(BaseModel):
+    intent: str = Field(description="User intent, such as log_drink or ask_advice.")
+    brand: str | None = Field(default=None, description="Drink brand.")
+    name: str | None = Field(default=None, description="Drink name.")
+    type: str | None = Field(default=None, description="Drink type.")
+    volume: int | None = Field(default=None, description="Volume in ml.")
+    sugar: str | None = Field(default=None, description="Sugar level: none, three, half, seven, full, unknown.")
+    time: str | None = Field(default=None, description="Drink time, now or HH:MM.")
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    missing_fields: List[str] = Field(default_factory=list)
+    follow_up: str | None = Field(default=None, description="Question to ask when fields are missing.")
+
+
+SUGAR_ALIASES = [
+    ("none", ["无糖", "不加糖", "零糖", "0糖", "不另外加糖"]),
+    ("three", ["三分糖", "3分糖", "少糖"]),
+    ("half", ["半糖", "五分糖", "5分糖"]),
+    ("seven", ["七分糖", "7分糖"]),
+    ("full", ["全糖", "正常糖", "满糖"]),
+]
+
+KNOWN_BRANDS = [
+    "瑞幸咖啡", "瑞幸", "库迪咖啡", "库迪", "星巴克", "喜茶", "奈雪", "蜜雪冰城",
+    "霸王茶姬", "茶百道", "沪上阿姨", "古茗", "一点点", "可口可乐", "百事可乐"
+]
+
+SIZE_ALIASES = [
+    (250, ["小杯", "小瓶"]),
+    (330, ["听装", "罐装", "一罐"]),
+    (350, ["中杯", "中瓶"]),
+    (500, ["大杯", "大瓶", "标准杯", "一杯"]),
+    (650, ["超大杯", "特大杯"]),
+]
+
+
+def _infer_intake_type(text: str, name: str | None) -> str:
+    source = f"{text} {name or ''}"
+    if any(word in source for word in ["奶茶", "拿铁", "生椰", "厚乳", "牛乳", "鲜奶"]):
+        return "milktea" if "咖啡" not in source and "拿铁" not in source else "coffee"
+    if any(word in source for word in ["咖啡", "拿铁", "美式", "摩卡", "冷萃", "espresso", "latte"]):
+        return "coffee"
+    if any(word in source for word in ["果茶", "柠檬茶", "水果茶", "杨枝甘露"]):
+        return "fruittea"
+    if any(word in source for word in ["茶", "乌龙", "绿茶", "红茶"]):
+        return "tea"
+    if any(word in source for word in ["可乐", "汽水", "苏打"]):
+        return "soda"
+    if any(word in source for word in ["啤酒", "鸡尾酒", "酒"]):
+        return "alcohol"
+    return "coffee"
+
+
+def _infer_volume(text: str) -> int | None:
+    match = re.search(r"(\d{2,4})\s*(?:ml|毫升|mL|ML)", text)
+    if match:
+        return int(match.group(1))
+    for volume, aliases in SIZE_ALIASES:
+        if any(alias in text for alias in aliases):
+            return volume
+    return None
+
+
+def _infer_sugar(text: str) -> str | None:
+    for value, aliases in SUGAR_ALIASES:
+        if any(alias in text for alias in aliases):
+            return value
+    return None
+
+
+def _infer_time(text: str) -> str:
+    match = re.search(r"(\d{1,2})[:：点](\d{1,2})?", text)
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2) or 0)
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return f"{hour:02d}:{minute:02d}"
+    if any(word in text for word in ["刚刚", "刚才", "现在", "刚喝", "刚买"]):
+        return "now"
+    if "下午" in text:
+        return "afternoon"
+    if "上午" in text:
+        return "morning"
+    if "晚上" in text:
+        return "evening"
+    return "now"
+
+
+def _infer_brand(text: str) -> str | None:
+    for brand in KNOWN_BRANDS:
+        if brand in text:
+            if brand == "瑞幸":
+                return "瑞幸咖啡"
+            if brand == "库迪":
+                return "库迪咖啡"
+            return brand
+    return None
+
+
+def _infer_name(text: str, brand: str | None) -> str | None:
+    cleaned = text
+    for token in ["我", "刚刚", "刚才", "刚", "喝了", "喝", "买了", "买", "一杯", "一瓶", "一罐", "了"]:
+        cleaned = cleaned.replace(token, " ")
+    if brand:
+        cleaned = cleaned.replace(brand, " ")
+        if brand == "瑞幸咖啡":
+            cleaned = cleaned.replace("瑞幸", " ")
+        if brand == "库迪咖啡":
+            cleaned = cleaned.replace("库迪", " ")
+    for _, aliases in SUGAR_ALIASES:
+        for alias in aliases:
+            cleaned = cleaned.replace(alias, " ")
+    for _, aliases in SIZE_ALIASES:
+        for alias in aliases:
+            cleaned = cleaned.replace(alias, " ")
+    cleaned = re.sub(r"\d{2,4}\s*(?:ml|毫升|mL|ML)", " ", cleaned)
+    parts = [p.strip(" ，,。.？?！!") for p in re.split(r"[,，。；;、\s]+", cleaned) if p.strip(" ，,。.？?！!")]
+    candidates = [p for p in parts if len(p) >= 2 and p not in ["今天", "下午", "上午", "晚上", "现在"]]
+    if not candidates:
+        return None
+    return max(candidates, key=len)
+
+
+def _build_missing_fields(result: dict) -> list[str]:
+    missing = []
+    for field_name in ["name", "volume", "sugar"]:
+        if result.get(field_name) in [None, "", "unknown"]:
+            missing.append(field_name)
+    return missing
+
+
+def _build_follow_up(missing_fields: list[str]) -> str | None:
+    if not missing_fields:
+        return None
+    if "volume" in missing_fields:
+        return "你喝的是中杯、大杯，还是可以告诉我大概多少 ml？"
+    if "sugar" in missing_fields:
+        return "这杯的甜度是无糖、三分糖、半糖、七分糖还是全糖？"
+    if "name" in missing_fields:
+        return "这杯饮品叫什么名字？"
+    return "我还需要一点信息才能帮你记录这杯饮品。"
+
+
+def _parse_intake_locally(user_message: str) -> dict:
+    text = user_message.strip()
+    log_keywords = ["喝", "买", "来一杯", "记录", "加一条", "点了", "刚刚", "刚才"]
+    intent = "log_drink" if any(keyword in text for keyword in log_keywords) else "ask_advice"
+    brand = _infer_brand(text)
+    name = _infer_name(text, brand) if intent == "log_drink" else None
+    result = {
+        "intent": intent,
+        "brand": brand,
+        "name": name,
+        "type": _infer_intake_type(text, name) if intent == "log_drink" else None,
+        "volume": _infer_volume(text) if intent == "log_drink" else None,
+        "sugar": _infer_sugar(text) if intent == "log_drink" else None,
+        "time": _infer_time(text) if intent == "log_drink" else None,
+        "confidence": 0.72 if intent == "log_drink" else 0.55,
+    }
+    result["missing_fields"] = _build_missing_fields(result) if intent == "log_drink" else []
+    result["follow_up"] = _build_follow_up(result["missing_fields"])
+    if result["missing_fields"]:
+        result["confidence"] = min(result["confidence"], 0.62)
+    return result
+
+
+def parse_intake_message(user_message: str) -> dict:
+    local_result = _parse_intake_locally(user_message)
+    if local_result["intent"] != "log_drink":
+        return local_result
+    if not local_result.get("missing_fields"):
+        return local_result
+    if not api_key or api_key.startswith("dummy_"):
+        return local_result
+
+    try:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are DrinkMind Intake Parser. Extract a drink logging intent from Chinese natural language. "
+             "Return structured fields only. Do not invent unknown required fields. "
+             "Sugar must be one of none, three, half, seven, full, unknown. "
+             "Type must be one of coffee, milktea, tea, fruittea, soda, alcohol."),
+            ("user", "{message}")
+        ])
+        structured_llm = llm.with_structured_output(IntakeParseResult, method="function_calling")
+        parsed = (prompt | structured_llm).invoke({"message": user_message})
+        result = parsed.dict()
+        for key, value in local_result.items():
+            if result.get(key) in [None, "", "unknown"] and value not in [None, "", "unknown"]:
+                result[key] = value
+        result["intent"] = result.get("intent") or "log_drink"
+        result["missing_fields"] = _build_missing_fields(result)
+        result["follow_up"] = _build_follow_up(result["missing_fields"])
+        if result["missing_fields"]:
+            result["confidence"] = min(float(result.get("confidence") or 0.7), 0.68)
+        return result
+    except Exception as e:
+        print(f"[Intake Parser] Falling back to local parser: {e}", flush=True)
+        return local_result
+
+
 def enrich_drink_data(r: dict, db) -> dict:
     """
     同步估算饮品的成分。流程：
@@ -77,6 +279,7 @@ def enrich_drink_data(r: dict, db) -> dict:
     drink_type = r.get("type", "coffee")
     volume = r.get("volume", 500)
     sugar_level = r.get("sugar", "unknown")
+    r["agent_trace_id"] = r.get("agent_trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
     
     SWEETNESS_MULTIPLIERS = {
         'none': 0.0,
@@ -110,6 +313,9 @@ def enrich_drink_data(r: dict, db) -> dict:
         r["data_source"] = sql_match.source
         r["confidence"] = sql_match.confidence
         r["reasoning"] = [f"SQL Exact Match (Scaled to {volume}ml, Applied sugar level '{sugar_level}')"]
+        r["estimation_method"] = "SQL_EXACT_MATCH"
+        r["matched_knowledge_id"] = sql_match.id
+        r["retrieval_score"] = None
         return r
 
     # 2. RAG Chroma 向量匹配
@@ -145,6 +351,9 @@ def enrich_drink_data(r: dict, db) -> dict:
                     r["data_source"] = "RAG 向量检索匹配"
                     r["confidence"] = 0.8
                     r["reasoning"] = [f"RAG 匹配到相近文档: {meta.get('brand')} {meta.get('name')} (Score: {score:.2f}, Applied '{sugar_level}')"]
+                    r["estimation_method"] = "RAG_MATCH"
+                    r["matched_knowledge_id"] = meta.get("id")
+                    r["retrieval_score"] = float(score)
                     return r
                 else:
                     print(f"[RAG Skip] 拒绝了离谱匹配: 搜索 '{name}', 匹配到 '{db_name}'", flush=True)
@@ -189,6 +398,9 @@ def enrich_drink_data(r: dict, db) -> dict:
         r["data_source"] = "AI 大模型估算"
         r["confidence"] = 0.75
         r["reasoning"] = [f"AI 估算: {res.reasoning}"]
+        r["estimation_method"] = "LLM_ESTIMATION"
+        r["matched_knowledge_id"] = None
+        r["retrieval_score"] = None
         return r
     except Exception as e:
         print(f"[AI Estimation Error] {e}", flush=True)
@@ -200,6 +412,9 @@ def enrich_drink_data(r: dict, db) -> dict:
     r["data_source"] = local_est["source"]
     r["confidence"] = local_est["confidence"]
     r["reasoning"] = local_est["reasoning"]
+    r["estimation_method"] = "LOCAL_ESTIMATOR"
+    r["matched_knowledge_id"] = None
+    r["retrieval_score"] = None
     
     return r
 

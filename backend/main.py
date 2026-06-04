@@ -6,8 +6,11 @@ from typing import List, Dict, Any
 from pydantic import BaseModel
 import datetime
 
-from database import engine, get_db, Base, DrinkLog, SleepRecord, DrinkKnowledge, HealthPlan, ChatLog, init_db
-from agent import enrich_drink_data, generate_health_report, generate_companion_response
+from database import engine, get_db, Base, DrinkLog, SleepRecord, DrinkKnowledge, HealthPlan, ChatLog, AgentTrace, init_db
+from agent import enrich_drink_data, generate_health_report, generate_companion_response, parse_intake_message
+from agents.orchestrator import run_agent_orchestrator
+from agents.memory_agent import apply_memory_updates, clear_user_memory, extract_memory_updates, read_user_memory
+from agents.health_plan_agent import create_health_plan, get_active_plan, plan_progress_summary, serialize_plan, update_plan_progress
 import uuid
 import json
 
@@ -24,6 +27,33 @@ app.add_middleware(
 
 # Initialize DB
 init_db()
+
+def save_agent_trace(db: Session, trace_state: Dict[str, Any]) -> None:
+    trace = AgentTrace(
+        id=trace_state.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}",
+        intent=trace_state.get("intent"),
+        user_input=trace_state.get("user_message"),
+        agents_called=json.dumps(trace_state.get("agents_called", []), ensure_ascii=False),
+        tools_used=json.dumps(trace_state.get("tools_used", []), ensure_ascii=False),
+        retrieved_docs=json.dumps(trace_state.get("retrieved_docs", []), ensure_ascii=False),
+        model_name=trace_state.get("model_name"),
+        latency_ms=trace_state.get("latency_ms"),
+        confidence=trace_state.get("confidence"),
+        final_action=trace_state.get("final_action"),
+        error=trace_state.get("error"),
+    )
+    db.add(trace)
+    db.commit()
+
+
+def parse_json_list(value: str | None) -> list:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
 
 # Pydantic models for incoming data
 class DrinkInput(BaseModel):
@@ -44,10 +74,19 @@ class DrinkInput(BaseModel):
     status: str = "active"
     data_source: str = "用户录入"
     confidence: float = 1.0
+    reasoning: Any = None
+    estimation_method: str = None
+    matched_knowledge_id: str = None
+    retrieval_score: float = None
+    agent_trace_id: str = None
 
 class SleepInput(BaseModel):
     date: str
     sleep_hours: float
+
+class IntakeParseInput(BaseModel):
+    message: str
+    date: str = None
 
 @app.get("/api/logs")
 def get_logs(db: Session = Depends(get_db)):
@@ -122,6 +161,25 @@ def log_sleep(sleep: SleepInput, db: Session = Depends(get_db)):
         db.add(db_sleep)
     db.commit()
     return {"status": "success"}
+
+@app.post("/api/agent/parse_intake")
+def parse_intake(input_data: IntakeParseInput, db: Session = Depends(get_db)):
+    parsed = parse_intake_message(input_data.message)
+    trace_state = {
+        "trace_id": f"trace_{uuid.uuid4().hex[:12]}",
+        "user_message": input_data.message,
+        "intent": parsed.get("intent"),
+        "agents_called": ["intake_parser"],
+        "tools_used": ["LOCAL_INTAKE_PARSER"],
+        "retrieved_docs": [],
+        "model_name": "local",
+        "latency_ms": 0.0,
+        "confidence": parsed.get("confidence"),
+        "final_action": "parse_intake",
+        "error": None,
+    }
+    save_agent_trace(db, trace_state)
+    return {"status": "success", "parsed_intake": parsed, "trace_id": trace_state["trace_id"]}
 
 @app.get("/api/agent/daily_insights")
 def get_daily_insights(date: str, db: Session = Depends(get_db)):
@@ -220,6 +278,24 @@ class ChatInput(BaseModel):
     date: str
     message: str
 
+class AgentActInput(BaseModel):
+    date: str
+    message: str
+
+class HealthPlanInput(BaseModel):
+    date: str
+    goal: str
+
+@app.post("/api/agent/act")
+def agent_act(input_data: AgentActInput, db: Session = Depends(get_db)):
+    agent_state = run_agent_orchestrator(input_data.message, input_data.date, db)
+    agent_state["memory_updates"] = apply_memory_updates(db, agent_state.get("memory_updates", {}))
+    if agent_state.get("intent") == "create_health_plan":
+        plan = create_health_plan(db, input_data.message, input_data.date)
+        agent_state["health_plan"] = serialize_plan(plan)
+    save_agent_trace(db, agent_state)
+    return {"status": "success", "agent_state": agent_state}
+
 @app.post("/api/chat")
 def send_chat_message(input_data: ChatInput, db: Session = Depends(get_db)):
     # 1. Save user message
@@ -252,8 +328,23 @@ def send_chat_message(input_data: ChatInput, db: Session = Depends(get_db)):
         "user_preferences": preferences
     }
 
-    # 4. Generate AI response
-    ai_response_text = generate_companion_response(input_data.message, history, context)
+    # 4. Parse possible drink logging action before falling back to companion chat
+    parsed_intake = parse_intake_message(input_data.message)
+    if parsed_intake.get("intent") == "log_drink":
+        memory_updates = extract_memory_updates(input_data.message, "log_drink", parsed_intake, db)
+        if parsed_intake.get("missing_fields"):
+            ai_response_text = parsed_intake.get("follow_up") or "我还需要一点信息才能帮你记录这杯饮品。"
+        else:
+            ai_response_text = (
+                f"我识别到这是一杯 {parsed_intake.get('brand') or ''} "
+                f"{parsed_intake.get('name')}，{parsed_intake.get('volume')}ml，"
+                f"甜度 {parsed_intake.get('sugar')}。我已经整理成结构化饮品对象。"
+            )
+    else:
+        parsed_intake = None
+        memory_updates = extract_memory_updates(input_data.message, "ask_advice", None, db)
+        ai_response_text = generate_companion_response(input_data.message, history, context)
+    memory_updates = apply_memory_updates(db, memory_updates)
 
     # 5. Save AI response
     now_str2 = datetime.datetime.now().isoformat()
@@ -261,7 +352,71 @@ def send_chat_message(input_data: ChatInput, db: Session = Depends(get_db)):
     db.add(ai_log)
     db.commit()
 
-    return {"status": "success", "response": ai_response_text}
+    trace_state = {
+        "trace_id": f"trace_{uuid.uuid4().hex[:12]}",
+        "user_message": input_data.message,
+        "intent": parsed_intake.get("intent") if parsed_intake else "ask_advice",
+        "agents_called": ["intake_parser"] if parsed_intake else ["intake_parser", "companion_agent"],
+        "tools_used": ["LOCAL_INTAKE_PARSER"] if parsed_intake else ["LLM_CHAT"],
+        "retrieved_docs": [],
+        "model_name": "local" if parsed_intake else None,
+        "latency_ms": 0.0,
+        "confidence": parsed_intake.get("confidence") if parsed_intake else None,
+        "memory_updates": memory_updates,
+        "final_action": "ask_follow_up" if parsed_intake and parsed_intake.get("missing_fields") else ("fill_log_form" if parsed_intake else "answer_advice"),
+        "error": None,
+    }
+    save_agent_trace(db, trace_state)
+
+    return {"status": "success", "response": ai_response_text, "parsed_intake": parsed_intake, "trace_id": trace_state["trace_id"]}
+
+@app.get("/api/agent/traces")
+def get_agent_traces(limit: int = 20, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, 100))
+    traces = db.query(AgentTrace).order_by(AgentTrace.created_at.desc()).limit(limit).all()
+    return {
+        "status": "success",
+        "traces": [
+            {
+                "id": trace.id,
+                "created_at": trace.created_at,
+                "intent": trace.intent,
+                "user_input": trace.user_input,
+                "agents_called": parse_json_list(trace.agents_called),
+                "tools_used": parse_json_list(trace.tools_used),
+                "retrieved_docs": parse_json_list(trace.retrieved_docs),
+                "model_name": trace.model_name,
+                "latency_ms": trace.latency_ms,
+                "confidence": trace.confidence,
+                "final_action": trace.final_action,
+                "error": trace.error,
+            }
+            for trace in traces
+        ]
+    }
+
+@app.get("/api/user/preferences")
+def get_user_preferences(db: Session = Depends(get_db)):
+    return {"status": "success", "preferences": read_user_memory(db)}
+
+@app.delete("/api/user/preferences")
+def delete_user_preferences(db: Session = Depends(get_db)):
+    deleted = clear_user_memory(db)
+    return {"status": "success", "deleted": deleted}
+
+@app.post("/api/health/plans")
+def create_plan(input_data: HealthPlanInput, db: Session = Depends(get_db)):
+    plan = create_health_plan(db, input_data.goal, input_data.date)
+    return {"status": "success", "plan": serialize_plan(plan)}
+
+@app.get("/api/health/plans/active")
+def get_active_health_plan(db: Session = Depends(get_db)):
+    return {"status": "success", "plan": serialize_plan(get_active_plan(db))}
+
+@app.post("/api/health/plans/active/progress")
+def refresh_active_health_plan(date: str, db: Session = Depends(get_db)):
+    plan = update_plan_progress(db, get_active_plan(db), date)
+    return {"status": "success", "plan": plan}
 
 @app.get("/api/agent/reports/daily")
 def get_daily_report(date: str, db: Session = Depends(get_db)):
@@ -279,6 +434,8 @@ def get_weekly_report(date: str, db: Session = Depends(get_db)):
         records_db = db.query(DrinkLog).filter(DrinkLog.date >= start_str, DrinkLog.date <= date, DrinkLog.status == 'active').all()
         logs = [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in records_db]
         report = generate_health_report(logs, "周度")
+        active_plan = get_active_plan(db)
+        report["active_plan_progress"] = plan_progress_summary(active_plan)
         return report
     except Exception as e:
         return {"insights": []}
