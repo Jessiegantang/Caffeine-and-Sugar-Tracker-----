@@ -17,9 +17,9 @@ export function renderChatHistory(history) {
   container.innerHTML = ''; // clear
   if (history.length === 0) {
     container.innerHTML = `
-      <div class="chat-msg assistant" style="display: flex; gap: 8px;">
-        <span style="font-size: 1.2rem;">☕</span>
-        <div style="background: rgba(192, 132, 252, 0.1); padding: 10px 14px; border-radius: 12px; border-top-left-radius: 2px; font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary);">
+      <div class="chat-msg assistant">
+        <span class="chat-avatar">AI</span>
+        <div class="chat-bubble assistant-bubble">
           录入今日第一杯饮品，Agent将根据你的历史习惯为你生成今日的平衡策略。你也可以直接在这里跟我聊天哦！
         </div>
       </div>
@@ -29,21 +29,21 @@ export function renderChatHistory(history) {
   
   for (const msg of history) {
     const msgDiv = document.createElement('div');
-    msgDiv.style.display = 'flex';
-    msgDiv.style.gap = '8px';
+    msgDiv.className = 'chat-msg';
     
     if (msg.role === 'user') {
-      msgDiv.style.flexDirection = 'row-reverse';
+      msgDiv.classList.add('user');
       msgDiv.innerHTML = `
-        <span style="font-size: 1.2rem;">👤</span>
-        <div style="background: linear-gradient(135deg, #a855f7, #c084fc); padding: 10px 14px; border-radius: 12px; border-top-right-radius: 2px; font-size: 0.95rem; line-height: 1.5; color: #ffffff; box-shadow: 0 2px 6px rgba(168, 85, 247, 0.25);">
+        <span class="chat-avatar">Me</span>
+        <div class="chat-bubble user-bubble">
           ${msg.content}
         </div>
       `;
     } else {
+      msgDiv.classList.add('assistant');
       msgDiv.innerHTML = `
-        <span style="font-size: 1.2rem;">☕</span>
-        <div style="background: rgba(255, 255, 255, 0.9); padding: 10px 14px; border-radius: 12px; border-top-left-radius: 2px; font-size: 0.95rem; line-height: 1.5; color: #334155; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <span class="chat-avatar">AI</span>
+        <div class="chat-bubble assistant-bubble">
           ${msg.content}
         </div>
       `;
@@ -68,12 +68,10 @@ export async function handleSendMessage() {
   // Optimistically add to UI
   const container = document.getElementById('chat-history');
   const tempMsg = document.createElement('div');
-  tempMsg.style.display = 'flex';
-  tempMsg.style.gap = '8px';
-  tempMsg.style.flexDirection = 'row-reverse';
+  tempMsg.className = 'chat-msg user';
   tempMsg.innerHTML = `
-    <span style="font-size: 1.2rem;">👤</span>
-    <div style="background: linear-gradient(135deg, #a855f7, #c084fc); padding: 10px 14px; border-radius: 12px; border-top-right-radius: 2px; font-size: 0.95rem; line-height: 1.5; color: #ffffff; box-shadow: 0 2px 6px rgba(168, 85, 247, 0.25);">
+    <span class="chat-avatar">Me</span>
+    <div class="chat-bubble user-bubble">
       ${message}
     </div>
   `;

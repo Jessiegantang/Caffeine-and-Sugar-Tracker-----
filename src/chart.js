@@ -58,8 +58,8 @@ export function renderWeeklyChart(container, logs, weekDates) {
     // Gridline
     svgHTML += `
       <line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" 
-            stroke="rgba(255,255,255,0.06)" stroke-dasharray="4,4" stroke-width="1" />
-      <text x="${paddingLeft - 8}" y="${y + 4}" fill="#64748b" font-size="10" font-family="Plus Jakarta Sans" text-anchor="end">
+            stroke="#dce6e2" stroke-dasharray="4,4" stroke-width="1" />
+      <text x="${paddingLeft - 8}" y="${y + 4}" fill="#71858b" font-size="10" font-family="Plus Jakarta Sans" text-anchor="end">
         ${label}
       </text>
     `;
@@ -110,7 +110,7 @@ export function renderWeeklyChart(container, logs, weekDates) {
 
     // X-axis label
     svgHTML += `
-      <text x="${xCenter}" y="${height - paddingBottom + 18}" fill="#94a3b8" font-size="10" font-family="Plus Jakarta Sans" text-anchor="middle">
+      <text x="${xCenter}" y="${height - paddingBottom + 18}" fill="#8a9ca1" font-size="10" font-family="Plus Jakarta Sans" text-anchor="middle">
         ${shortDate}
       </text>
     `;
@@ -119,19 +119,19 @@ export function renderWeeklyChart(container, logs, weekDates) {
   // Draw X Axis Baseline
   svgHTML += `
     <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" 
-          stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+          stroke="#cbdad5" stroke-width="1.5" />
   `;
 
   // Define Gradients & Styles
   svgHTML += `
     <defs>
       <linearGradient id="chart-caffeine-grad" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%" stop-color="#6366f1" stop-opacity="0.8"/>
-        <stop offset="100%" stop-color="#a855f7" stop-opacity="1"/>
+        <stop offset="0%" stop-color="#2f8f83" stop-opacity="0.78"/>
+        <stop offset="100%" stop-color="#6fc0a8" stop-opacity="0.95"/>
       </linearGradient>
       <linearGradient id="chart-sugar-grad" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.8"/>
-        <stop offset="100%" stop-color="#fda4af" stop-opacity="1"/>
+        <stop offset="0%" stop-color="#d59a22" stop-opacity="0.72"/>
+        <stop offset="100%" stop-color="#f0c96b" stop-opacity="0.9"/>
       </linearGradient>
     </defs>
   </svg>
