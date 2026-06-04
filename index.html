@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +8,16 @@
   <!-- Google Fonts: Plus Jakarta Sans for numbers and English, Noto Sans SC for Chinese -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/style.css?v=1780478820">
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <div class="container">
-    
+
     <!-- Background decorative blur shapes -->
     <div class="blur-glow shape-1"></div>
     <div class="blur-glow shape-2"></div>
@@ -21,7 +25,8 @@
     <!-- Header Section -->
     <header class="app-header">
       <div class="brand-logo">
-        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
           <path d="M17 8h1a4 4 0 1 1 0 8h-1" />
           <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
           <line x1="6" y1="2" x2="6" y2="4" />
@@ -36,7 +41,8 @@
     <!-- Navigation Tabs -->
     <div class="tabs-container glass">
       <button class="tab-btn active" data-tab="tab-daily">
-        <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+          stroke-width="2">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
           <line x1="16" y1="2" x2="16" y2="6"></line>
           <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -44,10 +50,11 @@
         </svg>
         单日记录与分析
       </button>
-      
+
       <button class="tab-btn" data-tab="tab-database">
-        <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 19V10"/>
+        <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path d="M12 19V10" />
           <polyline points="5 19 12 12 19 19"></polyline>
           <circle cx="12" cy="12" r="3"></circle>
         </svg>
@@ -60,430 +67,449 @@
       <!-- Tab 1 & 2 Content -->
       <div class="main-content" id="main-content">
         <div class="workspace-grid">
-        
-        <!-- Left Column: Inputs, Templates, and Library -->
-        <div class="workspace-left" id="workspace-left">
-<section class="calendar-section card glass">
-            <div class="section-header-row calendar-header-row">
-              <h3 class="card-title">补录日历</h3>
-              <div class="calendar-nav-group">
-                <button type="button" id="calendar-prev-month" class="calendar-nav-btn">←</button>
-                <span id="calendar-month-label" class="calendar-month-label">--</span>
-                <button type="button" id="calendar-next-month" class="calendar-nav-btn">→</button>
-              </div>
-            </div>
-            <div class="calendar-week-head">
-              <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
-            </div>
-            <div id="calendar-grid" class="calendar-grid"></div>
-            <p class="calendar-hint">点日期即可切换到该日查看/补录，带小点表示当天有记录。</p>
-          </section>
 
-          
-        
-        <!-- Drink Search -->
-        <section class="drink-search-section card glass">
-          <h3 class="card-title">饮品搜索</h3>
-          <div class="search-container">
-            <input type="text" id="drink-search-input" placeholder="搜索饮品名称或品牌..." autocomplete="off">
-            <button type="button" id="drink-search-btn">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </button>
-          </div>
-          <div id="drink-search-results" class="search-results" style="display: none;">
-            <!-- Dynamically populated search results -->
-          </div>
-        </section>
-
-        <!-- Quick Templates -->
-        <section class="templates-section card glass">
-          <h3 class="card-title">热门饮品</h3>
-          <div class="templates-list" id="hot-drinks-list">
-            <!-- Dynamically populated from database -->
-          </div>
-        </section>
-
-        <!-- Custom Drinks Library (Local Database) -->
-        <section class="custom-library-section card glass">
-          <div class="section-header-row">
-            <h3 class="card-title">我的常用饮品库</h3>
-            <span class="badge count-badge" id="library-count">0</span>
-          </div>
-          <div class="library-list-container">
-            <div id="library-empty" class="library-empty-msg">
-              <p>暂无常用饮品，可在录入表单勾选保存</p>
-            </div>
-            <div id="library-grid" class="library-grid">
-              <!-- Dynamically populated custom drinks -->
-            </div>
-          </div>
-        </section>
-
-        <!-- Drink Intake Log Form -->
-        <section class="form-section card glass">
-          <h3 class="card-title">录入新饮品</h3>
-          <form id="drink-form" autocomplete="off">
-            
-            <!-- Hidden field for base sugar override from templates -->
-            <input type="hidden" id="input-base-sugar-override" value="">
-            
-            <!-- Date Picker for log date -->
-            <div class="form-group">
-              <label for="input-date">饮用日期 <span class="required">*</span></label>
-              <input type="date" id="input-date" required>
-            </div>
-
-            <!-- Brand & Name -->
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="input-brand">品牌 <span class="label-note">(选填)</span></label>
-                <input type="text" id="input-brand" placeholder="例如：瑞幸、喜茶" list="brand-suggestions">
-                <datalist id="brand-suggestions">
-                  <option value="瑞幸咖啡"></option>
-                  <option value="库迪咖啡"></option>
-                  <option value="喜茶"></option>
-                  <option value="奈雪的茶"></option>
-                  <option value="星巴克"></option>
-                  <option value="蜜雪冰城"></option>
-                  <option value="霸王茶姬"></option>
-                  <option value="茶颜悦色"></option>
-                </datalist>
-              </div>
-              <div class="form-group flex-2">
-                <label for="input-name">饮品名称 <span class="required">*</span></label>
-                <input type="text" id="input-name" placeholder="例如：冰美式、芝芝莓莓" required>
-              </div>
-            </div>
-
-            <!-- Beverage Type (Radio Chips) -->
-            <div class="form-group">
-              <label>饮品类型 <span class="required">*</span></label>
-              <div class="radio-chips-group">
-                <label class="radio-chip">
-                  <input type="radio" name="drink-type" value="coffee" checked>
-                  <span class="chip-label">☕ 咖啡</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="drink-type" value="teacoffee">
-                  <span class="chip-label">🥥 茶咖</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="drink-type" value="tea">
-                  <span class="chip-label">🍵 原叶茶</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="drink-type" value="milktea">
-                  <span class="chip-label">🧋 奶茶</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="drink-type" value="fruittea">
-                  <span class="chip-label">🍋 果茶</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="drink-type" value="soda">
-                  <span class="chip-label">🥤 汽水</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="drink-type" value="alcohol">
-                  <span class="chip-label">🍺 酒精</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Sugar Level (Radio Chips - 5 levels for Luckin style custom sugar levels) -->
-            <div class="form-group">
-              <label>糖度等级 <span class="required">*</span></label>
-              <div class="radio-chips-group sugar-chips">
-                <label class="radio-chip">
-                  <input type="radio" name="sugar-level" value="unknown" checked>
-                  <span class="chip-label">未知(估算)</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="sugar-level" value="none">
-                  <span class="chip-label">不另加糖 (0%)</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="sugar-level" value="three">
-                  <span class="chip-label">三分 (30%)</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="sugar-level" value="half">
-                  <span class="chip-label">半糖 (50%)</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="sugar-level" value="seven">
-                  <span class="chip-label">七分 (70%)</span>
-                </label>
-                <label class="radio-chip">
-                  <input type="radio" name="sugar-level" value="full">
-                  <span class="chip-label">全糖 (100%)</span>
-                </label>
-              </div>
-              <p class="calendar-hint">提示：不另外加糖 ≠ 0糖。拿铁/生椰/果汁基底等仍会有本身糖分。</p>
-            </div>
-
-            <!-- Volume (ml) -->
-            <div class="form-group">
-              <label for="input-volume">容量 (毫升 ml) <span class="required">*</span></label>
-              <div class="input-with-presets">
-                <input type="number" id="input-volume" value="500" min="10" max="2000" required>
-                <span class="input-suffix">ml</span>
-              </div>
-              <div class="preset-volumes-row">
-                <button type="button" class="volume-preset-btn" data-vol="350">中杯 (350ml)</button>
-                <button type="button" class="volume-preset-btn" data-vol="500">大杯 (500ml)</button>
-                <button type="button" class="volume-preset-btn" data-vol="650">超大杯 (650ml)</button>
-              </div>
-            </div>
-
-            <!-- Consumption Time -->
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="input-start-time">开始时间 <span class="required">*</span></label>
-                <div class="time-input-group">
-                  <input type="time" id="input-start-time" required>
-                  <button type="button" class="time-now-btn" id="start-time-now">现在</button>
+          <!-- Left Column: Inputs, Templates, and Library -->
+          <div class="workspace-left" id="workspace-left">
+            <section class="calendar-section card glass">
+              <div class="section-header-row calendar-header-row">
+                <h3 class="card-title">补录日历</h3>
+                <div class="calendar-nav-group">
+                  <button type="button" id="calendar-prev-month" class="calendar-nav-btn">←</button>
+                  <span id="calendar-month-label" class="calendar-month-label">--</span>
+                  <button type="button" id="calendar-next-month" class="calendar-nav-btn">→</button>
                 </div>
               </div>
-              <div class="form-group flex-1">
-                <label for="input-end-time">预计喝完 <span class="required">*</span></label>
-                <div class="time-input-group">
-                  <input type="time" id="input-end-time" required>
-                  <button type="button" class="time-now-btn" id="end-time-now">现在</button>
-                </div>
+              <div class="calendar-week-head">
+                <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
               </div>
-            </div>
+              <div id="calendar-grid" class="calendar-grid"></div>
+              <p class="calendar-hint">点日期即可切换到该日查看/补录，带小点表示当天有记录。</p>
+            </section>
 
-            <!-- Save checkbox & Submit Button -->
-            <div class="form-footer-row">
-              <label class="checkbox-container">
-                <input type="checkbox" id="save-to-library">
-                <span class="checkmark"></span>
-                同时保存到常用饮品库
-              </label>
-              <button type="submit" class="submit-btn">
-                <svg class="btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                添加摄入记录
-              </button>
-            </div>
-          </form>
-        </section>
 
-          <section class="form-section card glass" style="margin-top: 16px;">
-            <h3 class="card-title">睡眠补录</h3>
-            <div class="form-group" style="display: flex; gap: 8px; align-items: center;">
-              <input type="number" id="input-sleep" class="form-control" placeholder="睡眠时长 (小时)" step="0.5" style="flex: 1;">
-              <button id="save-sleep-btn" class="btn btn-primary">保存</button>
-            </div>
-          </section>
 
-<section class="logs-section card glass">
-            <div class="section-header-row">
-              <h3 class="card-title">该日饮用记录</h3>
-              <span class="badge count-badge" id="logs-count">0</span>
-            </div>
-            
-            <div class="logs-list-container">
-              <div id="logs-empty" class="logs-empty-msg">
-                <div class="empty-icon">☕</div>
-                <p>该日期尚无任何摄入记录</p>
-                <p class="empty-hint">在左侧录入或使用模板，记录饮品吧！</p>
-              </div>
-              
-              <div id="logs-list" class="logs-list">
-                <!-- Dynamically populated list items -->
-              </div>
-            </div>
-          </section>
-      </div>
-
-      <!-- Right Column: Tabs Contents -->
-      <div class="workspace-right">
-        <!-- ==================== TAB 1: DAILY DASHBOARD ==================== -->
-        <div id="tab-daily" class="tab-content active">
-          
-          <!-- Selected Date Stat Rings -->
-          <section class="dashboard-section card glass">
-            <div class="section-header-row">
-              <h2 class="section-title">摄入数据看板</h2>
-              <!-- Calendar Date Filter to switch viewing log date -->
-              <div class="filter-date-group">
-                <label for="filter-date" class="sr-only">选择日期</label>
-                <input type="date" id="filter-date" class="date-selector-input">
-              </div>
-            </div>
-            
-            <div class="gauges-grid">
-              <!-- Caffeine Gauge -->
-              <div class="gauge-card">
-                <div class="gauge-circle-container">
-                  <svg class="progress-ring" width="140" height="140">
-                    <circle class="progress-ring__background" stroke="rgba(255,255,255,0.05)" stroke-width="10" fill="transparent" r="60" cx="70" cy="70"/>
-                    <circle id="caffeine-progress" class="progress-ring__bar progress-caffeine" stroke="url(#caffeine-gradient)" stroke-width="10" stroke-linecap="round" fill="transparent" r="60" cx="70" cy="70" stroke-dasharray="377" stroke-dashoffset="377"/>
+            <!-- Drink Search -->
+            <section class="drink-search-section card glass">
+              <h3 class="card-title">饮品搜索</h3>
+              <div class="search-container">
+                <input type="text" id="drink-search-input" placeholder="搜索饮品名称或品牌..." autocomplete="off">
+                <button type="button" id="drink-search-btn">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                   </svg>
-                  <div class="gauge-value-container">
-                    <span id="caffeine-total" class="gauge-value">0</span>
-                    <span class="gauge-unit">mg</span>
+                </button>
+              </div>
+              <div id="drink-search-results" class="search-results" style="display: none;">
+                <!-- Dynamically populated search results -->
+              </div>
+            </section>
+
+            <!-- Quick Templates -->
+            <section class="templates-section card glass">
+              <h3 class="card-title">热门饮品</h3>
+              <div class="templates-list" id="hot-drinks-list">
+                <!-- Dynamically populated from database -->
+              </div>
+            </section>
+
+            <!-- Custom Drinks Library (Local Database) -->
+            <section class="custom-library-section card glass">
+              <div class="section-header-row">
+                <h3 class="card-title">我的常用饮品库</h3>
+                <span class="badge count-badge" id="library-count">0</span>
+              </div>
+              <div class="library-list-container">
+                <div id="library-empty" class="library-empty-msg">
+                  <p>暂无常用饮品，可在录入表单勾选保存</p>
+                </div>
+                <div id="library-grid" class="library-grid">
+                  <!-- Dynamically populated custom drinks -->
+                </div>
+              </div>
+            </section>
+
+            <!-- Drink Intake Log Form -->
+            <section class="form-section card glass">
+              <h3 class="card-title">录入新饮品</h3>
+              <form id="drink-form" autocomplete="off">
+
+                <!-- Hidden field for base sugar override from templates -->
+                <input type="hidden" id="input-base-sugar-override" value="">
+
+                <!-- Date Picker for log date -->
+                <div class="form-group">
+                  <label for="input-date">饮用日期 <span class="required">*</span></label>
+                  <input type="date" id="input-date" required>
+                </div>
+
+                <!-- Brand & Name -->
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="input-brand">品牌 <span class="label-note">(选填)</span></label>
+                    <input type="text" id="input-brand" placeholder="例如：瑞幸、喜茶" list="brand-suggestions">
+                    <datalist id="brand-suggestions">
+                      <option value="瑞幸咖啡"></option>
+                      <option value="库迪咖啡"></option>
+                      <option value="喜茶"></option>
+                      <option value="奈雪的茶"></option>
+                      <option value="星巴克"></option>
+                      <option value="蜜雪冰城"></option>
+                      <option value="霸王茶姬"></option>
+                      <option value="茶颜悦色"></option>
+                    </datalist>
+                  </div>
+                  <div class="form-group flex-2">
+                    <label for="input-name">饮品名称 <span class="required">*</span></label>
+                    <input type="text" id="input-name" placeholder="例如：冰美式、芝芝莓莓" required>
                   </div>
                 </div>
-                <div class="gauge-label">
-                  <h3>咖啡因摄入</h3>
-                  <p>日推荐限量 400 mg</p>
-                </div>
-              </div>
 
-              <!-- Sugar Gauge -->
-              <div class="gauge-card">
-                <div class="gauge-circle-container">
-                  <svg class="progress-ring" width="140" height="140">
-                    <circle class="progress-ring__background" stroke="rgba(255,255,255,0.05)" stroke-width="10" fill="transparent" r="60" cx="70" cy="70"/>
-                    <circle id="sugar-progress" class="progress-ring__bar progress-sugar" stroke="url(#sugar-gradient)" stroke-width="10" stroke-linecap="round" fill="transparent" r="60" cx="70" cy="70" stroke-dasharray="377" stroke-dashoffset="377"/>
-                  </svg>
-                  <div class="gauge-value-container">
-                    <span id="sugar-total" class="gauge-value">0.0</span>
-                    <span class="gauge-unit">g</span>
+                <!-- Beverage Type (Radio Chips) -->
+                <div class="form-group">
+                  <label>饮品类型 <span class="required">*</span></label>
+                  <div class="radio-chips-group">
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="coffee" checked>
+                      <span class="chip-label">☕ 咖啡</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="teacoffee">
+                      <span class="chip-label">🥥 茶咖</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="tea">
+                      <span class="chip-label">🍵 原叶茶</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="milktea">
+                      <span class="chip-label">🧋 奶茶</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="fruittea">
+                      <span class="chip-label">🍋 果茶</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="soda">
+                      <span class="chip-label">🥤 汽水</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="alcohol">
+                      <span class="chip-label">🍺 酒精</span>
+                    </label>
                   </div>
                 </div>
-                <div class="gauge-label">
-                  <h3>糖分摄入</h3>
-                  <p>日推荐限量 50 g</p>
+
+                <!-- Sugar Level (Radio Chips - 5 levels for Luckin style custom sugar levels) -->
+                <div class="form-group">
+                  <label>糖度等级 <span class="required">*</span></label>
+                  <div class="radio-chips-group sugar-chips">
+                    <label class="radio-chip">
+                      <input type="radio" name="sugar-level" value="unknown" checked>
+                      <span class="chip-label">未知(估算)</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="sugar-level" value="none">
+                      <span class="chip-label">不另加糖 (0%)</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="sugar-level" value="three">
+                      <span class="chip-label">三分 (30%)</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="sugar-level" value="half">
+                      <span class="chip-label">半糖 (50%)</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="sugar-level" value="seven">
+                      <span class="chip-label">七分 (70%)</span>
+                    </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="sugar-level" value="full">
+                      <span class="chip-label">全糖 (100%)</span>
+                    </label>
+                  </div>
+                  <p class="calendar-hint">提示：不另外加糖 ≠ 0糖。拿铁/生椰/果汁基底等仍会有本身糖分。</p>
+                </div>
+
+                <!-- Volume (ml) -->
+                <div class="form-group">
+                  <label for="input-volume">容量 (毫升 ml) <span class="required">*</span></label>
+                  <div class="input-with-presets">
+                    <input type="number" id="input-volume" value="500" min="10" max="2000" required>
+                    <span class="input-suffix">ml</span>
+                  </div>
+                  <div class="preset-volumes-row">
+                    <button type="button" class="volume-preset-btn" data-vol="350">中杯 (350ml)</button>
+                    <button type="button" class="volume-preset-btn" data-vol="500">大杯 (500ml)</button>
+                    <button type="button" class="volume-preset-btn" data-vol="650">超大杯 (650ml)</button>
+                  </div>
+                </div>
+
+                <!-- Consumption Time -->
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="input-start-time">开始时间 <span class="required">*</span></label>
+                    <div class="time-input-group">
+                      <input type="time" id="input-start-time" required>
+                      <button type="button" class="time-now-btn" id="start-time-now">现在</button>
+                    </div>
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="input-end-time">预计喝完 <span class="required">*</span></label>
+                    <div class="time-input-group">
+                      <input type="time" id="input-end-time" required>
+                      <button type="button" class="time-now-btn" id="end-time-now">现在</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Save checkbox & Submit Button -->
+                <div class="form-footer-row">
+                  <label class="checkbox-container">
+                    <input type="checkbox" id="save-to-library">
+                    <span class="checkmark"></span>
+                    同时保存到常用饮品库
+                  </label>
+                  <button type="submit" class="submit-btn">
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                      stroke-width="2">
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    添加摄入记录
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section class="form-section card glass" style="margin-top: 16px;">
+              <h3 class="card-title">睡眠补录</h3>
+              <div class="form-group" style="display: flex; gap: 8px; align-items: center;">
+                <input type="number" id="input-sleep" class="form-control" placeholder="睡眠时长 (小时)" step="0.5"
+                  style="flex: 1;">
+                <button id="save-sleep-btn" class="btn btn-primary">保存</button>
+              </div>
+            </section>
+
+            <section class="logs-section card glass">
+              <div class="section-header-row">
+                <h3 class="card-title">该日饮用记录</h3>
+                <span class="badge count-badge" id="logs-count">0</span>
+              </div>
+
+              <div class="logs-list-container">
+                <div id="logs-empty" class="logs-empty-msg">
+                  <div class="empty-icon">☕</div>
+                  <p>该日期尚无任何摄入记录</p>
+                  <p class="empty-hint">在左侧录入或使用模板，记录饮品吧！</p>
+                </div>
+
+                <div id="logs-list" class="logs-list">
+                  <!-- Dynamically populated list items -->
                 </div>
               </div>
-            </div>
-            <div class="alcohol-summary-row">
-              <div class="alcohol-summary-card">
-                <span class="alcohol-summary-label">当日酒精摄入</span>
-                <span class="alcohol-summary-value"><span id="alcohol-total">0.0</span> g</span>
-              </div>
-            </div>
-          </section>
-
-          <!-- Selected Day's Log List -->
-          
-
-          
-          
-          <!-- Daily Budget & Agent Analysis Section -->
-          <section class="agent-section card glass" style="border: 2px solid #c084fc; background: rgba(192, 132, 252, 0.05); margin-bottom: 16px;">
-            <div class="section-header-row">
-              <h3 class="card-title" style="color: #c084fc;">☕ 今日预算与平衡策略</h3>
-              <span id="agent-risk-badge" class="badge" style="background: #a855f7; color: white;">分析中...</span>
-            </div>
-            <div class="agent-container" style="padding-top: 15px;">
-              <div style="margin-bottom: 20px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem;">
-                  <span>咖啡因剩余预算</span>
-                  <span id="caffeine-budget-text">0 / 400 mg</span>
-                </div>
-                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
-                  <div id="caffeine-budget-bar" style="height: 100%; width: 0%; background: #c084fc; transition: width 0.3s ease;"></div>
-                </div>
-                
-                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem;">
-                  <span>糖分剩余预算</span>
-                  <span id="sugar-budget-text">0 / 50 g</span>
-                </div>
-                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
-                  <div id="sugar-budget-bar" style="height: 100%; width: 0%; background: #f472b6; transition: width 0.3s ease;"></div>
-                </div>
-              </div>
-              <div id="agent-advice-text" style="font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary);"></div>
-            </div>
-          </section>
-
-          <!-- Dynamic Daily Insights -->
-          <section class="insights-section card glass">
-            <h3 class="card-title">该日摄入分析报告</h3>
-            <div class="insights-container">
-              <div id="insights-list" class="insights-list">
-                <!-- Dynamically populated insight cards -->
-              </div>
-            </div>
-          </section>
-
-          <!-- Companion Chat UI -->
-          <div class="chat-container glass" style="padding: 16px; background: rgba(255, 255, 255, 0.6); border-radius: 12px; border: 1px solid rgba(255,255,255,0.8); display: flex; flex-direction: column; height: 550px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-top: 16px;">
-            <h3 style="margin-top: 0; margin-bottom: 12px; font-size: 1.1rem; color: #475569; display: flex; align-items: center; gap: 8px;">
-              <span>☕</span> 交互小助手
-            </h3>
-            <div id="chat-history" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 8px; margin-bottom: 12px;">
-              <!-- Messages go here -->
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <input id="chat-input" type="text" placeholder="问我任何问题..." style="flex: 1; padding: 10px 14px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; font-size: 0.95rem; outline: none; background: rgba(255,255,255,0.8);">
-              <button id="chat-send-btn" style="background: linear-gradient(135deg, #a855f7, #c084fc); color: white; border: none; border-radius: 8px; padding: 0 16px; font-weight: 600; cursor: pointer; transition: all 0.2s;">发送</button>
-            </div>
+            </section>
           </div>
 
-        
-          
-          <!-- Weekly Analytics Dashboard Card -->
-          <section class="weekly-stats-card card glass">
-            <h2 class="section-title">近 7 天累计报告</h2>
-            
-            <div class="weekly-aggregates-grid">
-              <div class="agg-card">
-                <div class="agg-val-row">
-                  <span id="weekly-caffeine-total" class="agg-val num-caffeine">0</span>
-                  <span class="agg-unit">mg</span>
-                </div>
-                <span class="agg-label">周咖啡因总摄入</span>
-              </div>
-              
-              <div class="agg-card">
-                <div class="agg-val-row">
-                  <span id="weekly-sugar-total" class="agg-val num-sugar">0.0</span>
-                  <span class="agg-unit">g</span>
-                </div>
-                <span class="agg-label">周糖分总摄入</span>
-              </div>
-              
-              <div class="agg-card">
-                <div class="agg-val-row">
-                  <span id="weekly-active-days" class="agg-val">0</span>
-                  <span class="agg-unit">天</span>
-                </div>
-                <span class="agg-label">饮品打卡天数</span>
-              </div>
-              <div class="agg-card">
-                <div class="agg-val-row">
-                  <span id="weekly-alcohol-total" class="agg-val">0.0</span>
-                  <span class="agg-unit">g</span>
-                </div>
-                <span class="agg-label">周酒精总摄入</span>
-              </div>
-            </div>
-          </section>
+          <!-- Right Column: Tabs Contents -->
+          <div class="workspace-right">
+            <!-- ==================== TAB 1: DAILY DASHBOARD ==================== -->
+            <div id="tab-daily" class="tab-content active">
 
-          <!-- SVG Chart Card -->
-          <section class="chart-card card glass">
-            <h3 class="card-title">近 7 日摄入趋势 (占推荐日限额比例)</h3>
-            <div class="chart-legends-row">
-              <span class="legend-item"><span class="legend-dot dot-caffeine"></span> 咖啡因</span>
-              <span class="legend-item"><span class="legend-dot dot-sugar"></span> 糖分</span>
-            </div>
-            <div class="chart-container-box" id="weekly-chart-container">
-              <!-- Dynamically populated SVG Chart -->
-            </div>
-          </section>
+              <!-- Selected Date Stat Rings -->
+              <section class="dashboard-section card glass">
+                <div class="section-header-row">
+                  <h2 class="section-title">摄入数据看板</h2>
+                  <!-- Calendar Date Filter to switch viewing log date -->
+                  <div class="filter-date-group">
+                    <label for="filter-date" class="sr-only">选择日期</label>
+                    <input type="date" id="filter-date" class="date-selector-input">
+                  </div>
+                </div>
 
-          <!-- Weekly Insights Rule Alerts -->
-          <section class="weekly-insights-section card glass">
-            <h3 class="card-title">周度健康关联评估</h3>
-            <div class="weekly-insights-container">
-              <div id="weekly-insights-list" class="insights-list">
-                <!-- Dynamically populated weekly warnings/tips -->
+                <div class="gauges-grid">
+                  <!-- Caffeine Gauge -->
+                  <div class="gauge-card">
+                    <div class="gauge-circle-container">
+                      <svg class="progress-ring" width="140" height="140">
+                        <circle class="progress-ring__background" stroke="rgba(255,255,255,0.05)" stroke-width="10"
+                          fill="transparent" r="60" cx="70" cy="70" />
+                        <circle id="caffeine-progress" class="progress-ring__bar progress-caffeine"
+                          stroke="url(#caffeine-gradient)" stroke-width="10" stroke-linecap="round" fill="transparent"
+                          r="60" cx="70" cy="70" stroke-dasharray="377" stroke-dashoffset="377" />
+                      </svg>
+                      <div class="gauge-value-container">
+                        <span id="caffeine-total" class="gauge-value">0</span>
+                        <span class="gauge-unit">mg</span>
+                      </div>
+                    </div>
+                    <div class="gauge-label">
+                      <h3>咖啡因摄入</h3>
+                      <p>日推荐限量 400 mg</p>
+                    </div>
+                  </div>
+
+                  <!-- Sugar Gauge -->
+                  <div class="gauge-card">
+                    <div class="gauge-circle-container">
+                      <svg class="progress-ring" width="140" height="140">
+                        <circle class="progress-ring__background" stroke="rgba(255,255,255,0.05)" stroke-width="10"
+                          fill="transparent" r="60" cx="70" cy="70" />
+                        <circle id="sugar-progress" class="progress-ring__bar progress-sugar"
+                          stroke="url(#sugar-gradient)" stroke-width="10" stroke-linecap="round" fill="transparent"
+                          r="60" cx="70" cy="70" stroke-dasharray="377" stroke-dashoffset="377" />
+                      </svg>
+                      <div class="gauge-value-container">
+                        <span id="sugar-total" class="gauge-value">0.0</span>
+                        <span class="gauge-unit">g</span>
+                      </div>
+                    </div>
+                    <div class="gauge-label">
+                      <h3>糖分摄入</h3>
+                      <p>日推荐限量 50 g</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="alcohol-summary-row">
+                  <div class="alcohol-summary-card">
+                    <span class="alcohol-summary-label">当日酒精摄入</span>
+                    <span class="alcohol-summary-value"><span id="alcohol-total">0.0</span> g</span>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Selected Day's Log List -->
+
+
+
+
+              <!-- Daily Budget & Agent Analysis Section -->
+              <section class="agent-section card glass"
+                style="border: 2px solid #c084fc; background: rgba(192, 132, 252, 0.05); margin-bottom: 16px;">
+                <div class="section-header-row">
+                  <h3 class="card-title" style="color: #c084fc;">☕ 今日预算与平衡策略</h3>
+                  <span id="agent-risk-badge" class="badge" style="background: #a855f7; color: white;">分析中...</span>
+                </div>
+                <div class="agent-container" style="padding-top: 15px;">
+                  <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem;">
+                      <span>咖啡因剩余预算</span>
+                      <span id="caffeine-budget-text">0 / 400 mg</span>
+                    </div>
+                    <div
+                      style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+                      <div id="caffeine-budget-bar"
+                        style="height: 100%; width: 0%; background: #c084fc; transition: width 0.3s ease;"></div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem;">
+                      <span>糖分剩余预算</span>
+                      <span id="sugar-budget-text">0 / 50 g</span>
+                    </div>
+                    <div
+                      style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
+                      <div id="sugar-budget-bar"
+                        style="height: 100%; width: 0%; background: #f472b6; transition: width 0.3s ease;"></div>
+                    </div>
+                  </div>
+                  <div id="agent-advice-text"
+                    style="font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary);"></div>
+                </div>
+              </section>
+
+              <!-- Dynamic Daily Insights -->
+              <section class="insights-section card glass">
+                <h3 class="card-title">该日摄入分析报告</h3>
+                <div class="insights-container">
+                  <div id="insights-list" class="insights-list">
+                    <!-- Dynamically populated insight cards -->
+                  </div>
+                </div>
+              </section>
+
+              <!-- Companion Chat UI -->
+              <div class="chat-container glass"
+                style="padding: 16px; background: rgba(255, 255, 255, 0.6); border-radius: 12px; border: 1px solid rgba(255,255,255,0.8); display: flex; flex-direction: column; height: 550px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-top: 16px;">
+                <h3
+                  style="margin-top: 0; margin-bottom: 12px; font-size: 1.1rem; color: #475569; display: flex; align-items: center; gap: 8px;">
+                  <span>☕</span> 交互小助手
+                </h3>
+                <div id="chat-history"
+                  style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 8px; margin-bottom: 12px;">
+                  <!-- Messages go here -->
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <input id="chat-input" type="text" placeholder="问我任何问题..."
+                    style="flex: 1; padding: 10px 14px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; font-size: 0.95rem; outline: none; background: rgba(255,255,255,0.8);">
+                  <button id="chat-send-btn"
+                    style="background: linear-gradient(135deg, #a855f7, #c084fc); color: white; border: none; border-radius: 8px; padding: 0 16px; font-weight: 600; cursor: pointer; transition: all 0.2s;">发送</button>
+                </div>
               </div>
-            </div>
-          </section>
-        </div> <!-- Close tab-daily -->
-      </div> <!-- Close workspace-right -->
+
+
+
+              <!-- Weekly Analytics Dashboard Card -->
+              <section class="weekly-stats-card card glass">
+                <h2 class="section-title">近 7 天累计报告</h2>
+
+                <div class="weekly-aggregates-grid">
+                  <div class="agg-card">
+                    <div class="agg-val-row">
+                      <span id="weekly-caffeine-total" class="agg-val num-caffeine">0</span>
+                      <span class="agg-unit">mg</span>
+                    </div>
+                    <span class="agg-label">周咖啡因总摄入</span>
+                  </div>
+
+                  <div class="agg-card">
+                    <div class="agg-val-row">
+                      <span id="weekly-sugar-total" class="agg-val num-sugar">0.0</span>
+                      <span class="agg-unit">g</span>
+                    </div>
+                    <span class="agg-label">周糖分总摄入</span>
+                  </div>
+
+                  <div class="agg-card">
+                    <div class="agg-val-row">
+                      <span id="weekly-active-days" class="agg-val">0</span>
+                      <span class="agg-unit">天</span>
+                    </div>
+                    <span class="agg-label">饮品打卡天数</span>
+                  </div>
+                  <div class="agg-card">
+                    <div class="agg-val-row">
+                      <span id="weekly-alcohol-total" class="agg-val">0.0</span>
+                      <span class="agg-unit">g</span>
+                    </div>
+                    <span class="agg-label">周酒精总摄入</span>
+                  </div>
+                </div>
+              </section>
+
+              <!-- SVG Chart Card -->
+              <section class="chart-card card glass">
+                <h3 class="card-title">近 7 日摄入趋势 (占推荐日限额比例)</h3>
+                <div class="chart-legends-row">
+                  <span class="legend-item"><span class="legend-dot dot-caffeine"></span> 咖啡因</span>
+                  <span class="legend-item"><span class="legend-dot dot-sugar"></span> 糖分</span>
+                </div>
+                <div class="chart-container-box" id="weekly-chart-container">
+                  <!-- Dynamically populated SVG Chart -->
+                </div>
+              </section>
+
+              <!-- Weekly Insights Rule Alerts -->
+              <section class="weekly-insights-section card glass">
+                <h3 class="card-title">周度健康关联评估</h3>
+                <div class="weekly-insights-container">
+                  <div id="weekly-insights-list" class="insights-list">
+                    <!-- Dynamically populated weekly warnings/tips -->
+                  </div>
+                </div>
+              </section>
+            </div> <!-- Close tab-daily -->
+          </div> <!-- Close workspace-right -->
         </div> <!-- Close workspace-grid -->
 
       </div> <!-- Close main-content -->
@@ -491,7 +517,7 @@
       <!-- ==================== TAB 3: DATABASE MANAGEMENT ==================== -->
       <!-- Tab 3 Content -->
       <div id="tab-database" class="tab-content database-full-width">
-        
+
         <!-- Database Stats Card -->
         <section class="database-stats-card card glass">
           <div class="section-header-row">
@@ -499,231 +525,231 @@
             <div class="db-actions">
               <button type="button" id="db-import-btn" class="btn btn-primary">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
                 批量导入
               </button>
-                <button type="button" id="db-reset-btn" class="btn btn-danger">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                    <path d="M3 3v5h5"/>
-                  </svg>
-                  重置数据库
-                </button>
-              </div>
-            </div>
-            <div class="db-stats-grid">
-              <div class="db-stat-item">
-                <span class="db-stat-value" id="db-total-count">0</span>
-                <span class="db-stat-label">饮品总数</span>
-              </div>
-              <div class="db-stat-item">
-                <span class="db-stat-value" id="db-custom-count">0</span>
-                <span class="db-stat-label">自定义饮品</span>
-              </div>
-            </div>
-          </section>
-
-          <!-- Import Modal -->
-          <div id="import-modal" class="modal-overlay" style="display: none;">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h3>批量导入饮品</h3>
-                <button type="button" id="import-modal-close" class="modal-close-btn">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-              <div class="import-content">
-                <div class="import-format-info">
-                  <h4>CSV 文件格式要求</h4>
-                  <p>请准备一个 CSV 文件，包含以下列（顺序必须一致）：</p>
-                  <table class="format-table">
-                    <thead>
-                      <tr>
-                        <th>列名</th>
-                        <th>必填</th>
-                        <th>说明</th>
-                        <th>示例</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>类型</td>
-                        <td>是</td>
-                        <td>coffee/teacoffee/tea/milktea/fruittea/soda/alcohol</td>
-                        <td>coffee</td>
-                      </tr>
-                      <tr>
-                        <td>品牌</td>
-                        <td>否</td>
-                        <td>饮品品牌名称</td>
-                        <td>瑞幸咖啡</td>
-                      </tr>
-                      <tr>
-                        <td>名称</td>
-                        <td>是</td>
-                        <td>饮品名称</td>
-                        <td>冰美式</td>
-                      </tr>
-                      <tr>
-                        <td>咖啡因(mg)</td>
-                        <td>是</td>
-                        <td>咖啡因含量，数值</td>
-                        <td>180</td>
-                      </tr>
-                      <tr>
-                        <td>糖分(g)</td>
-                        <td>是</td>
-                        <td>糖分含量，数值</td>
-                        <td>0</td>
-                      </tr>
-                      <tr>
-                        <td>容量(ml)</td>
-                        <td>是</td>
-                        <td>饮品容量，数值</td>
-                        <td>500</td>
-                      </tr>
-                      <tr>
-                        <td>酒精度(%)</td>
-                        <td>否</td>
-                        <td>仅酒精饮品需要，数值</td>
-                        <td>4.0</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <p class="format-note">提示：Excel 可以直接另存为 CSV 格式（选择 UTF-8 编码）</p>
-                </div>
-                <div class="import-upload">
-                  <input type="file" id="import-file" accept=".csv" style="display: none;">
-                  <button type="button" id="import-select-btn" class="btn btn-primary">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="17 8 12 3 7 8"/>
-                      <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    选择 CSV 文件
-                  </button>
-                  <div id="import-filename" class="import-filename"></div>
-                  <button type="button" id="import-execute-btn" class="btn btn-success" disabled>
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    开始导入
-                  </button>
-                  <div id="import-result" class="import-result"></div>
-                </div>
-              </div>
-</div>
-
-        <!-- ==================== TAB 2: WEEKLY STATISTICS ==================== -->
-        </div>
-      <!-- Add Drink Form -->
-          <section class="add-drink-form-section card glass">
-            <h3 class="card-title">添加新饮品</h3>
-            <form id="add-drink-form" autocomplete="off">
-              <div class="form-row">
-                <div class="form-group flex-1">
-                  <label for="new-drink-brand">品牌</label>
-                  <input type="text" id="new-drink-brand" placeholder="例如：瑞幸咖啡">
-                </div>
-                <div class="form-group flex-2">
-                  <label for="new-drink-name">饮品名称 <span class="required">*</span></label>
-                  <input type="text" id="new-drink-name" placeholder="例如：冰美式" required>
-                </div>
-              </div>
-              <div class="form-group">
-                <label>饮品类型 <span class="required">*</span></label>
-                <div class="radio-chips-group">
-                  <label class="radio-chip">
-                    <input type="radio" name="new-drink-type" value="coffee" checked>
-                    <span class="chip-label">☕ 咖啡</span>
-                  </label>
-                  <label class="radio-chip">
-                    <input type="radio" name="new-drink-type" value="teacoffee">
-                    <span class="chip-label">🥥 茶咖</span>
-                  </label>
-                  <label class="radio-chip">
-                    <input type="radio" name="new-drink-type" value="tea">
-                    <span class="chip-label">🍵 原叶茶</span>
-                  </label>
-                  <label class="radio-chip">
-                    <input type="radio" name="new-drink-type" value="milktea">
-                    <span class="chip-label">🧋 奶茶</span>
-                  </label>
-                  <label class="radio-chip">
-                    <input type="radio" name="new-drink-type" value="fruittea">
-                    <span class="chip-label">🍋 果茶</span>
-                  </label>
-                  <label class="radio-chip">
-                    <input type="radio" name="new-drink-type" value="soda">
-                    <span class="chip-label">🥤 汽水</span>
-                  </label>
-                  <label class="radio-chip">
-                    <input type="radio" name="new-drink-type" value="alcohol">
-                    <span class="chip-label">🍺 酒精</span>
-                  </label>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group flex-1">
-                  <label for="new-drink-caffeine">咖啡因含量 (mg) <span class="required">*</span></label>
-                  <input type="number" id="new-drink-caffeine" value="100" min="0" max="500" required>
-                </div>
-                <div class="form-group flex-1">
-                  <label for="new-drink-sugar">糖分含量 (g) <span class="required">*</span></label>
-                  <input type="number" id="new-drink-sugar" value="10" min="0" max="100" step="0.1" required>
-                </div>
-                <div class="form-group flex-1">
-                  <label for="new-drink-volume">容量 (ml) <span class="required">*</span></label>
-                  <input type="number" id="new-drink-volume" value="500" min="10" max="2000" required>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group flex-1">
-                  <label for="new-drink-abv">酒精度 (%) (仅酒精饮品)</label>
-                  <input type="number" id="new-drink-abv" value="0" min="0" max="95" step="0.1">
-                </div>
-              </div>
-              <button type="submit" class="submit-btn">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
+              <button type="button" id="db-reset-btn" class="btn btn-danger">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
                 </svg>
-                添加到数据库
+                重置数据库
               </button>
-            </form>
-          </section>
-
-          <!-- Database Table -->
-          <section class="database-table-section card glass">
-            <h3 class="card-title">数据库列表</h3>
-            <div class="table-container">
-              <table id="drinks-table" class="drinks-table">
-                <thead>
-                  <tr>
-                    <th>品牌</th>
-                    <th>名称</th>
-                    <th>类型</th>
-                    <th>咖啡因 (mg)</th>
-                    <th>糖分 (g)</th>
-                    <th>容量 (ml)</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="drinks-table-body">
-                  <!-- Dynamically populated -->
-                </tbody>
-              </table>
             </div>
-          </section>
+          </div>
+          <div class="db-stats-grid">
+            <div class="db-stat-item">
+              <span class="db-stat-value" id="db-total-count">0</span>
+              <span class="db-stat-label">饮品总数</span>
+            </div>
+            <div class="db-stat-item">
+              <span class="db-stat-value" id="db-custom-count">0</span>
+              <span class="db-stat-label">自定义饮品</span>
+            </div>
+          </div>
+        </section>
 
-          <!-- Edit Drink Modal -->
+        <!-- Import Modal -->
+        <div id="import-modal" class="modal-overlay" style="display: none;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>批量导入饮品</h3>
+              <button type="button" id="import-modal-close" class="modal-close-btn">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <div class="import-content">
+              <div class="import-format-info">
+                <h4>CSV 文件格式要求</h4>
+                <p>请准备一个 CSV 文件，包含以下列（顺序必须一致）：</p>
+                <table class="format-table">
+                  <thead>
+                    <tr>
+                      <th>列名</th>
+                      <th>必填</th>
+                      <th>说明</th>
+                      <th>示例</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>类型</td>
+                      <td>是</td>
+                      <td>coffee/teacoffee/tea/milktea/fruittea/soda/alcohol</td>
+                      <td>coffee</td>
+                    </tr>
+                    <tr>
+                      <td>品牌</td>
+                      <td>否</td>
+                      <td>饮品品牌名称</td>
+                      <td>瑞幸咖啡</td>
+                    </tr>
+                    <tr>
+                      <td>名称</td>
+                      <td>是</td>
+                      <td>饮品名称</td>
+                      <td>冰美式</td>
+                    </tr>
+                    <tr>
+                      <td>咖啡因(mg)</td>
+                      <td>是</td>
+                      <td>咖啡因含量，数值</td>
+                      <td>180</td>
+                    </tr>
+                    <tr>
+                      <td>糖分(g)</td>
+                      <td>是</td>
+                      <td>糖分含量，数值</td>
+                      <td>0</td>
+                    </tr>
+                    <tr>
+                      <td>容量(ml)</td>
+                      <td>是</td>
+                      <td>饮品容量，数值</td>
+                      <td>500</td>
+                    </tr>
+                    <tr>
+                      <td>酒精度(%)</td>
+                      <td>否</td>
+                      <td>仅酒精饮品需要，数值</td>
+                      <td>4.0</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p class="format-note">提示：Excel 可以直接另存为 CSV 格式（选择 UTF-8 编码）</p>
+              </div>
+              <div class="import-upload">
+                <input type="file" id="import-file" accept=".csv" style="display: none;">
+                <button type="button" id="import-select-btn" class="btn btn-primary">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  选择 CSV 文件
+                </button>
+                <div id="import-filename" class="import-filename"></div>
+                <button type="button" id="import-execute-btn" class="btn btn-success" disabled>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  开始导入
+                </button>
+                <div id="import-result" class="import-result"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== TAB 2: WEEKLY STATISTICS ==================== -->
+        </div>
+        <!-- Add Drink Form -->
+        <section class="add-drink-form-section card glass">
+          <h3 class="card-title">添加新饮品</h3>
+          <form id="add-drink-form" autocomplete="off">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="new-drink-brand">品牌</label>
+                <input type="text" id="new-drink-brand" placeholder="例如：瑞幸咖啡">
+              </div>
+              <div class="form-group flex-2">
+                <label for="new-drink-name">饮品名称 <span class="required">*</span></label>
+                <input type="text" id="new-drink-name" placeholder="例如：冰美式" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>饮品类型 <span class="required">*</span></label>
+              <div class="radio-chips-group">
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="coffee" checked>
+                  <span class="chip-label">☕ 咖啡</span>
+                </label>
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="teacoffee">
+                  <span class="chip-label">🥥 茶咖</span>
+                </label>
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="tea">
+                  <span class="chip-label">🍵 原叶茶</span>
+                </label>
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="milktea">
+                  <span class="chip-label">🧋 奶茶</span>
+                </label>
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="fruittea">
+                  <span class="chip-label">🍋 果茶</span>
+                </label>
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="soda">
+                  <span class="chip-label">🥤 汽水</span>
+                </label>
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="alcohol">
+                  <span class="chip-label">🍺 酒精</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="new-drink-caffeine">咖啡因含量 (mg) <span class="required">*</span></label>
+                <input type="number" id="new-drink-caffeine" value="100" min="0" max="500" required>
+              </div>
+              <div class="form-group flex-1">
+                <label for="new-drink-sugar">糖分含量 (g) <span class="required">*</span></label>
+                <input type="number" id="new-drink-sugar" value="10" min="0" max="100" step="0.1" required>
+              </div>
+              <div class="form-group flex-1">
+                <label for="new-drink-volume">容量 (ml) <span class="required">*</span></label>
+                <input type="number" id="new-drink-volume" value="500" min="10" max="2000" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="new-drink-abv">酒精度 (%) (仅酒精饮品)</label>
+                <input type="number" id="new-drink-abv" value="0" min="0" max="95" step="0.1">
+              </div>
+            </div>
+            <button type="submit" class="submit-btn">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              添加到数据库
+            </button>
+          </form>
+        </section>
+
+        <!-- Database Table -->
+        <section class="database-table-section card glass">
+          <h3 class="card-title">数据库列表</h3>
+          <div class="table-container">
+            <table id="drinks-table" class="drinks-table">
+              <thead>
+                <tr>
+                  <th>品牌</th>
+                  <th>名称</th>
+                  <th>类型</th>
+                  <th>咖啡因 (mg)</th>
+                  <th>糖分 (g)</th>
+                  <th>容量 (ml)</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="drinks-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Edit Drink Modal -->
         <div id="edit-drink-modal" class="modal-overlay" style="display: none;">
           <div class="modal-content">
             <div class="modal-header">
@@ -800,6 +826,7 @@
   </svg>
 
   <!-- Main JavaScript Entry Module -->
-  <script type="module" src="/main.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
+
 </html>
