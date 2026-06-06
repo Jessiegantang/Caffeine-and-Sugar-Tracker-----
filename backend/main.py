@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import datetime
 
 from database import engine, get_db, Base, DrinkLog, SleepRecord, DrinkKnowledge, HealthPlan, ChatLog, AgentTrace, ProductCandidate, NutritionEvidence, init_db
-from agent import enrich_drink_data, generate_health_report, generate_companion_response, parse_intake_message
+from agent import enrich_drink_data, generate_health_report as _agent_generate_health_report, generate_companion_response, parse_intake_message
 from agents.orchestrator import run_agent_orchestrator
 from agents.memory_agent import apply_memory_updates, clear_user_memory, extract_memory_updates, read_user_memory
 from agents.health_plan_agent import create_health_plan, get_active_plan, plan_progress_summary, serialize_plan, update_plan_progress
@@ -27,10 +27,24 @@ import json
 
 app = FastAPI(title="DrinkMind Agent API")
 
+
+def generate_health_report(logs, report_type: str) -> dict:
+    try:
+        return _agent_generate_health_report(logs, report_type)
+    except Exception as e:
+        print(f"[Health Report] fallback: {e}", flush=True)
+        return {"insights": []}
+
 # Setup CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict to frontend domain
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -99,6 +113,34 @@ class IntakeParseInput(BaseModel):
     message: str
     date: str = None
 
+
+def normalize_drink_log(log: Dict[str, Any]) -> Dict[str, Any]:
+    now_time = datetime.datetime.now().strftime("%H:%M")
+    return {
+        "id": str(log.get("id") or f"log_{uuid.uuid4().hex[:10]}"),
+        "date": str(log.get("date") or datetime.date.today().isoformat()),
+        "brand": log.get("brand"),
+        "name": str(log.get("name") or "Unknown Drink"),
+        "type": str(log.get("type") or "coffee"),
+        "sugar": str(log.get("sugar") or "unknown"),
+        "volume": int(log.get("volume") or log.get("defaultVolume") or 500),
+        "startTime": str(log.get("startTime") or log.get("time") or now_time),
+        "endTime": str(log.get("endTime") or log.get("time") or now_time),
+        "caffeine": float(log.get("caffeine") or 0),
+        "sugarContent": float(log.get("sugarContent") or log.get("baseSugar") or 0),
+        "alcoholContent": log.get("alcoholContent"),
+        "abv": log.get("abv"),
+        "baseSugarDensity": log.get("baseSugarDensity"),
+        "status": str(log.get("status") or "active"),
+        "data_source": str(log.get("data_source") or log.get("dataSource") or "用户录入"),
+        "confidence": float(log.get("confidence") or 1.0),
+        "reasoning": json.dumps(log.get("reasoning"), ensure_ascii=False) if isinstance(log.get("reasoning"), (list, dict)) else log.get("reasoning"),
+        "estimation_method": log.get("estimation_method"),
+        "matched_knowledge_id": log.get("matched_knowledge_id"),
+        "retrieval_score": log.get("retrieval_score"),
+        "agent_trace_id": log.get("agent_trace_id"),
+    }
+
 @app.get("/api/logs")
 def get_logs(db: Session = Depends(get_db)):
     logs = db.query(DrinkLog).filter(DrinkLog.status == 'active').all()
@@ -109,11 +151,11 @@ def get_logs(db: Session = Depends(get_db)):
     return result
 
 @app.post("/api/sync_logs")
-def sync_logs(logs: List[DrinkInput], db: Session = Depends(get_db)):
+def sync_logs(logs: List[Dict[str, Any]], db: Session = Depends(get_db)):
     # Clear existing and insert new
     db.query(DrinkLog).delete()
     for log in logs:
-        db_log = DrinkLog(**log.dict())
+        db_log = DrinkLog(**normalize_drink_log(log))
         db.add(db_log)
     db.commit()
     return {"status": "success", "count": len(logs)}

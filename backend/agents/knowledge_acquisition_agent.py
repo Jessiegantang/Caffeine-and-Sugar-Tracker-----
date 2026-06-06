@@ -141,8 +141,11 @@ def _build_acquisition_graph():
 def _discovery_node(state: AcquisitionGraphState) -> AcquisitionGraphState:
     if not os.getenv("ENABLE_WEB_DISCOVERY", "").lower() in {"1", "true", "yes"}:
         state["policy"] = "Web discovery disabled. Set ENABLE_WEB_DISCOVERY=true to search the web."
+        state["errors"].append({"stage": "discover", "error": "web_discovery_disabled"})
         return state
-    state["discovered"] = _safe_search(state["query"], max_results=state["max_results"])
+    state["discovered"] = _safe_search_with_variants(state["query"], max_results=state["max_results"])
+    if not state["discovered"]:
+        state["errors"].append({"stage": "discover", "error": "search_returned_no_results", "query": state["query"]})
     state["policy"] = "Safe mode uses search-result metadata only. Autonomous mode may fetch allowed public pages."
     return state
 
@@ -218,27 +221,29 @@ def _extract_and_stage_node(state: AcquisitionGraphState) -> AcquisitionGraphSta
         ]
 
     for row in source_rows:
-        parsed = parse_candidate_from_text(row["text"])
-        if not parsed.get("name"):
-            continue
-        candidate = create_manual_candidate(db, {
-            **parsed,
-            "source_url": row["url"],
-            "source_title": row["title"],
-            "source_snippet": _trim_text(row["text"], 500),
-            "discovery_method": row["method"],
-            "confidence": row["confidence"],
-        })
-        candidates.append(serialize_candidate(candidate))
-
-        extracted = extract_nutrition_fields(row["text"])
-        if _has_minimum_nutrition(extracted):
-            evidence = add_nutrition_evidence(db, candidate.id, {
-                "source_type": "crawler_page" if state["mode"] == "autonomous" else "search_snippet",
+        items = extract_items_from_text(row["text"], default_title=row["title"])
+        for item in items:
+            if not item.get("name"):
+                continue
+            candidate = create_manual_candidate(db, {
+                "brand": item.get("brand"),
+                "name": item.get("name"),
+                "type": item.get("type") or infer_type(item.get("name", "")),
                 "source_url": row["url"],
-                "raw_evidence": _trim_text(row["text"], 1800),
+                "source_title": row["title"],
+                "source_snippet": _trim_text(item.get("raw_evidence") or row["text"], 500),
+                "discovery_method": f"{row['method']}:{item.get('extraction_method', 'rules')}",
+                "confidence": min(float(item.get("confidence") or row["confidence"]), 0.9),
             })
-            evidence_rows.append(serialize_evidence(evidence))
+            candidates.append(serialize_candidate(candidate))
+
+            if _has_minimum_nutrition(item):
+                evidence = add_nutrition_evidence(db, candidate.id, {
+                    "source_type": "crawler_page" if state["mode"] == "autonomous" else "search_snippet",
+                    "source_url": row["url"],
+                    "raw_evidence": item_to_evidence_text(item),
+                })
+                evidence_rows.append(serialize_evidence(evidence))
 
     state["candidates"] = candidates
     state["evidence"] = evidence_rows
@@ -414,6 +419,87 @@ def normalize_image_items(items: list[dict], default_brand: str | None = None) -
             "confidence": round(max(0.1, min(float(item.get("confidence") or 0.65), 0.95)), 2),
         })
     return normalized
+
+
+def extract_items_from_text(text: str, default_title: str | None = None) -> list[dict]:
+    llm_items = _extract_items_with_llm(text, default_title)
+    if llm_items:
+        return llm_items
+
+    parsed = parse_candidate_from_text(f"{default_title or ''} {text or ''}")
+    if not parsed.get("name"):
+        return []
+    extracted = extract_nutrition_fields(text or "")
+    return [{
+        "brand": parsed.get("brand"),
+        "name": parsed.get("name"),
+        "type": parsed.get("type"),
+        "volume": extracted.get("volume"),
+        "caffeine": extracted.get("caffeine"),
+        "sugar": extracted.get("sugar"),
+        "abv": extracted.get("abv"),
+        "raw_evidence": _trim_text(text or default_title or parsed.get("name", ""), 1200),
+        "confidence": 0.5 if _has_minimum_nutrition(extracted) else 0.4,
+        "extraction_method": "rules",
+    }]
+
+
+def _extract_items_with_llm(text: str, default_title: str | None = None) -> list[dict]:
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key or api_key.startswith("dummy_"):
+        return []
+    if not os.getenv("ENABLE_TEXT_EXTRACTION_LLM", "true").lower() in {"1", "true", "yes"}:
+        return []
+
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_openai import ChatOpenAI
+
+        model_name = os.getenv("TEXT_EXTRACTION_MODEL_NAME") or os.getenv("MODEL_NAME", "gpt-4o-mini")
+        base_url = os.getenv("BASE_URL")
+        kwargs = {"model": model_name, "api_key": api_key, "temperature": 0}
+        if base_url:
+            kwargs["base_url"] = base_url
+        extractor = ChatOpenAI(**kwargs)
+        response = extractor.invoke([
+            SystemMessage(content=(
+                "You are DrinkMind Text Evidence Agent. Extract beverage nutrition candidates from public page text. "
+                "Return strict JSON only. The page may mention one or many beverages. "
+                "Do not invent values. Use null for unknown volume, caffeine, sugar, or abv. "
+                "Each item must include brand, name, type, volume, caffeine, sugar, abv, raw_evidence, confidence. "
+                "type must be one of coffee, teacoffee, tea, milktea, fruittea, soda, alcohol."
+            )),
+            HumanMessage(content=(
+                "Return JSON in this shape: {\"items\":[...]}\n"
+                f"title: {default_title or ''}\n"
+                f"text: {_trim_text(text or '', 6000)}"
+            )),
+        ])
+        parsed = _parse_json_object(response.content)
+        normalized = []
+        for item in parsed.get("items", []):
+            name = (item.get("name") or "").strip()
+            if not name:
+                continue
+            extracted = {
+                "volume": _safe_float(item.get("volume")),
+                "caffeine": _safe_float(item.get("caffeine")),
+                "sugar": _safe_float(item.get("sugar")),
+                "abv": _safe_float(item.get("abv")),
+            }
+            normalized.append({
+                "brand": normalize_brand(item.get("brand") or infer_brand(f"{default_title or ''} {text or ''}")),
+                "name": name,
+                "type": item.get("type") or infer_type(name),
+                **extracted,
+                "raw_evidence": item.get("raw_evidence") or _format_raw_evidence(item) or _trim_text(text or "", 800),
+                "confidence": round(max(0.1, min(float(item.get("confidence") or 0.6), 0.9)), 2),
+                "extraction_method": "llm_text",
+            })
+        return normalized
+    except Exception as e:
+        print(f"[Text Extraction Agent] Falling back to rules: {e}", flush=True)
+        return []
 
 
 def stage_image_items(db, items: list[dict], source_type: str = "image_upload") -> dict:
@@ -678,12 +764,129 @@ def _has_minimum_nutrition(extracted: dict) -> bool:
 
 def _safe_search(query: str, max_results: int = 5) -> list[dict]:
     try:
-        from duckduckgo_search import DDGS
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
 
         with DDGS() as ddgs:
-            return list(ddgs.text(query, max_results=max(1, min(max_results, 10))))
+            rows = []
+            for item in ddgs.text(query, max_results=max(1, min(max_results, 10))):
+                url = item.get("href") or item.get("url")
+                if not url:
+                    continue
+                rows.append({
+                    "title": item.get("title") or "",
+                    "body": item.get("body") or item.get("snippet") or "",
+                    "href": url,
+                })
+            return rows
     except Exception as e:
-        return [{"title": "Search unavailable", "body": str(e), "href": ""}]
+        print(f"[Knowledge Acquisition Search] failed query={query!r}: {e}", flush=True)
+        return []
+
+
+def _safe_search_with_variants(query: str, max_results: int = 5) -> list[dict]:
+    variants = [
+        query,
+        f"{query} 营养成分",
+        f"{query} 咖啡因 糖分",
+        f"{query} 官方",
+    ]
+    seen = set()
+    merged = []
+    for variant in variants:
+        remaining = max_results - len(merged)
+        if remaining <= 0:
+            break
+        for item in _safe_search(variant, max_results=remaining):
+            url = item.get("href") or item.get("url") or ""
+            key = url or f"{item.get('title')}|{item.get('body') or item.get('snippet')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            item["query_variant"] = variant
+            merged.append(item)
+            if len(merged) >= max_results:
+                break
+    return merged
+
+
+def _search_result_score(item: dict, query: str) -> int:
+    text = f"{item.get('title') or ''} {item.get('body') or item.get('snippet') or ''}".lower()
+    url = (item.get("href") or item.get("url") or "").lower()
+    score = 0
+    for token in re.split(r"\s+", query.lower()):
+        if token and token in text:
+            score += 2
+    for keyword in [
+        "咖啡因", "糖分", "营养", "成分", "含量", "测评", "检测", "消委会", "热量",
+        "caffeine", "sugar", "nutrition",
+    ]:
+        if keyword in text:
+            score += 3
+    if any(domain in url for domain in ["douyin.com", "youtube.com", "pdfjsviewer", "login/signout"]):
+        score -= 5
+    return score
+
+
+def _safe_search_with_variants(query: str, max_results: int = 5) -> list[dict]:
+    variants = [
+        query,
+        f"{query} nutrition facts",
+        f"{query} caffeine sugar",
+        f"{query} official",
+        f"{query} 含量",
+        f"{query} 测评",
+        f"{query} 营养成分",
+        f"{query} 咖啡因 糖分",
+    ]
+    seen = set()
+    merged = []
+    for variant in variants:
+        for item in _safe_search(variant, max_results=max_results):
+            url = item.get("href") or item.get("url") or ""
+            key = url or f"{item.get('title')}|{item.get('body') or item.get('snippet')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            item["query_variant"] = variant
+            item["_score"] = _search_result_score(item, query)
+            if item["_score"] <= 0:
+                continue
+            merged.append(item)
+    ranked = sorted(merged, key=lambda item: item.get("_score", 0), reverse=True)
+    for item in ranked:
+        item.pop("_score", None)
+    return ranked[:max_results]
+
+
+def _safe_search_with_variants(query: str, max_results: int = 5) -> list[dict]:
+    variants = [
+        f"{query} caffeine nutrition",
+        f"{query} 咖啡因 含量",
+        f"{query} 营养成分",
+        query,
+    ]
+    seen = set()
+    merged = []
+    per_variant = max(2, min(3, max_results))
+    for variant in variants:
+        for item in _safe_search(variant, max_results=per_variant):
+            url = item.get("href") or item.get("url") or ""
+            key = url or f"{item.get('title')}|{item.get('body') or item.get('snippet')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            item["query_variant"] = variant
+            item["_score"] = _search_result_score(item, query)
+            if item["_score"] <= 0:
+                continue
+            merged.append(item)
+    ranked = sorted(merged, key=lambda item: item.get("_score", 0), reverse=True)
+    for item in ranked:
+        item.pop("_score", None)
+    return ranked[:max_results]
 
 
 def _robots_allowed(url: str) -> dict:
@@ -694,7 +897,11 @@ def _robots_allowed(url: str) -> dict:
     rp = robotparser.RobotFileParser()
     rp.set_url(robots_url)
     try:
-        rp.read()
+        request = Request(robots_url, headers={"User-Agent": DEFAULT_CRAWLER_USER_AGENT})
+        timeout = float(os.getenv("CRAWLER_ROBOTS_TIMEOUT_SECONDS", "2") or 2)
+        with urlopen(request, timeout=timeout) as response:
+            content = response.read(128 * 1024).decode("utf-8", errors="ignore").splitlines()
+        rp.parse(content)
         allowed = rp.can_fetch(DEFAULT_CRAWLER_USER_AGENT, url)
         return {"allowed": bool(allowed), "reason": "robots_disallow" if not allowed else "allowed"}
     except Exception:

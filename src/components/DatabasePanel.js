@@ -528,13 +528,7 @@ async function handleDiscoverAcquisition() {
       max_results: 8,
       max_pages: parseOptionalNumber(maxPagesInput?.value) || 3
     });
-    const skipped = data.skipped_urls?.length || 0;
-    const fetched = data.fetched_pages?.length || 0;
-    const evidenceCount = data.evidence?.length || 0;
-    setDiscoveryResult(
-      `${mode === 'autonomous' ? '自主采集' : '保守采集'}完成：候选 ${data.candidates?.length || 0} 个，证据 ${evidenceCount} 条，抓取页面 ${fetched} 个，跳过 ${skipped} 个`,
-      true
-    );
+    renderDiscoveryResult(data, mode);
     if (resultEl && data.policy) {
       resultEl.title = data.policy;
     }
@@ -547,6 +541,29 @@ async function handleDiscoverAcquisition() {
       button.textContent = '开始采集';
     }
   }
+}
+
+function renderDiscoveryResult(data, mode) {
+  const result = document.getElementById('acquisition-discovery-result');
+  if (!result) return;
+  const discovered = data.discovered?.length || 0;
+  const allowed = data.allowed_urls?.length || 0;
+  const skipped = data.skipped_urls?.length || 0;
+  const fetched = data.fetched_pages?.length || 0;
+  const candidates = data.candidates?.length || 0;
+  const evidence = data.evidence?.length || 0;
+  const errors = data.errors || [];
+  const success = candidates > 0 || evidence > 0 || fetched > 0 || allowed > 0;
+  const errorText = errors.length
+    ? `<div class="discovery-detail">诊断：${errors.map(err => `${err.stage || 'unknown'}:${err.error || err.reason || 'failed'}`).join('；')}</div>`
+    : '';
+  const policyText = data.policy ? `<div class="discovery-detail">${escapeHtml(data.policy)}</div>` : '';
+  result.className = `acquisition-result ${success ? 'success' : 'error'}`;
+  result.innerHTML = `
+    <div>${mode === 'autonomous' ? '自主采集' : '保守采集'}完成：候选 ${candidates} 个，证据 ${evidence} 条，发现 ${discovered} 个，允许 ${allowed} 个，抓取页面 ${fetched} 个，跳过 ${skipped} 个</div>
+    ${policyText}
+    ${errorText}
+  `;
 }
 
 function handleImageFileSelected(e) {
@@ -878,6 +895,13 @@ function escapeAttr(value) {
   return String(value)
     .replaceAll('&', '&amp;')
     .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
 }

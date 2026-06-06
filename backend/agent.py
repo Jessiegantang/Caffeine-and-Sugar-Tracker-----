@@ -63,6 +63,37 @@ def delete_chroma_document(kb_id):
         pass
 
 
+def sync_chroma_document(kb_id, data: dict):
+    if not vectorstore:
+        return
+    try:
+        delete_chroma_document(kb_id)
+        content = (
+            f"brand: {data.get('brand', '')}\n"
+            f"name: {data.get('name', '')}\n"
+            f"volume: {data.get('volume', 500)}ml\n"
+            f"caffeine: {data.get('caffeine', 0)}mg\n"
+            f"sugar: {data.get('baseSugar', 0)}g"
+        )
+        doc = Document(
+            page_content=content,
+            metadata={
+                "id": kb_id,
+                "brand": data.get("brand", ""),
+                "name": data.get("name", ""),
+                "caffeine": data.get("caffeine", 0),
+                "sugar": data.get("baseSugar", 0),
+                "source": data.get("source", "knowledge_base"),
+                "confidence": data.get("confidence", 0.9),
+                "volume": data.get("volume", 500),
+            },
+        )
+        vectorstore.add_documents([doc], ids=[kb_id])
+        print(f"[Chroma Sync] Synced {kb_id} to ChromaDB")
+    except Exception as e:
+        print(f"[Chroma Sync] Skipped {kb_id}: {e}", flush=True)
+
+
 class IntakeParseResult(BaseModel):
     intent: str = Field(description="User intent, such as log_drink or ask_advice.")
     brand: str | None = Field(default=None, description="Drink brand.")

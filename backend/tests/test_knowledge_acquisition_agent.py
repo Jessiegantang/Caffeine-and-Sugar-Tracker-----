@@ -4,6 +4,8 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+os.environ["OPENAI_API_KEY"] = "dummy_test_key"
+os.environ["ENABLE_TEXT_EXTRACTION_LLM"] = "false"
 
 from fastapi.testclient import TestClient
 
@@ -286,6 +288,53 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
         self.assertEqual(len(body["fetched_pages"]), 1)
         self.assertGreaterEqual(len(body["candidates"]), 1)
         self.assertGreaterEqual(len(body["evidence"]), 1)
+
+    @patch("agents.knowledge_acquisition_agent.extract_items_from_text", return_value=[{
+        "brand": "TestBrand",
+        "name": "Test Discovery Latte",
+        "type": "coffee",
+        "volume": 500,
+        "caffeine": 132,
+        "sugar": 15,
+        "raw_evidence": "LLM extracted Test Discovery Latte volume 500ml caffeine 132mg sugar 15g",
+        "confidence": 0.72,
+        "extraction_method": "llm_text",
+    }])
+    @patch("agents.knowledge_acquisition_agent._safe_search")
+    def test_safe_discovery_can_stage_llm_extracted_text_items(self, mock_search, _mock_extract):
+        mock_search.return_value = [{
+            "title": "Test Discovery Latte nutrition",
+            "body": "The page includes product nutrition details.",
+            "href": "https://example.com/test-discovery-latte-llm",
+        }]
+
+        with patch.dict(os.environ, {"ENABLE_WEB_DISCOVERY": "true"}):
+            response = self.client.post("/api/knowledge/acquisition/discover", json={
+                "query": "Test Discovery Latte nutrition",
+                "mode": "safe",
+                "max_results": 1,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["mode"], "safe")
+        self.assertEqual(body["candidates"][0]["discovery_method"], "safe_search_metadata:llm_text")
+        self.assertEqual(body["evidence"][0]["extracted"]["caffeine"], 132.0)
+        self.assertEqual(body["evidence"][0]["extracted"]["sugar"], 15.0)
+
+    @patch("agents.knowledge_acquisition_agent._safe_search", return_value=[])
+    def test_discovery_reports_empty_search_diagnostics(self, _mock_search):
+        with patch.dict(os.environ, {"ENABLE_WEB_DISCOVERY": "true"}):
+            response = self.client.post("/api/knowledge/acquisition/discover", json={
+                "query": "No Result Drink",
+                "mode": "autonomous",
+                "max_results": 1,
+                "max_pages": 1,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        errors = response.json()["errors"]
+        self.assertTrue(any(error["error"] == "search_returned_no_results" for error in errors))
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+os.environ["OPENAI_API_KEY"] = "dummy_test_key"
+os.environ["ENABLE_TEXT_EXTRACTION_LLM"] = "false"
 
 from agent import enrich_drink_data
 from agents.health_plan_agent import build_plan_days, infer_plan_target
