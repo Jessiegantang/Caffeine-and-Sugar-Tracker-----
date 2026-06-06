@@ -5,6 +5,7 @@ langchain
 langchain_openai
 pydantic
 python-dotenv
+python-multipart
 sqlalchemy
 duckduckgo-search
 langchain-community

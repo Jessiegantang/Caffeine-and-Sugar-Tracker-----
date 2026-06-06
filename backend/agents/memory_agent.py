@@ -33,7 +33,8 @@ def plan_memory_updates(intent: str, parsed_drink: dict | None) -> dict:
 
 
 def extract_memory_updates(user_message: str, intent: str, parsed_drink: dict | None, db) -> dict:
-    updates = plan_memory_updates(intent, parsed_drink)
+    updates = summarize_preferences_from_logs(db)
+    updates.update(plan_memory_updates(intent, parsed_drink))
     lower_message = user_message.lower()
 
     if any(phrase in user_message for phrase in ["少喝糖", "少糖", "减少糖", "控糖", "戒糖"]):
@@ -49,8 +50,6 @@ def extract_memory_updates(user_message: str, intent: str, parsed_drink: dict | 
     if "无糖" in user_message or "不加糖" in user_message:
         updates["preferred_sugar"] = "none"
 
-    pattern_updates = summarize_preferences_from_logs(db)
-    updates.update({k: v for k, v in pattern_updates.items() if v})
     return updates
 
 

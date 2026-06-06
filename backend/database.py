@@ -100,6 +100,35 @@ class AgentTrace(Base):
     final_action = Column(String, nullable=True)
     error = Column(String, nullable=True)
 
+class ProductCandidate(Base):
+    __tablename__ = 'product_candidates'
+
+    id = Column(String, primary_key=True, index=True)
+    brand = Column(String, nullable=True, index=True)
+    name = Column(String, index=True)
+    type = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
+    source_title = Column(String, nullable=True)
+    source_snippet = Column(String, nullable=True)
+    discovery_method = Column(String, default="manual")
+    status = Column(String, default="pending_review", index=True)
+    confidence = Column(Float, default=0.5)
+    created_at = Column(String, default=lambda: datetime.datetime.now().isoformat(), index=True)
+    updated_at = Column(String, default=lambda: datetime.datetime.now().isoformat())
+
+class NutritionEvidence(Base):
+    __tablename__ = 'nutrition_evidence'
+
+    id = Column(String, primary_key=True, index=True)
+    candidate_id = Column(String, index=True)
+    source_url = Column(String, nullable=True)
+    source_type = Column(String, default="manual")
+    raw_evidence = Column(String)
+    extracted_json = Column(String, nullable=True)
+    confidence = Column(Float, default=0.5)
+    status = Column(String, default="pending_review", index=True)
+    created_at = Column(String, default=lambda: datetime.datetime.now().isoformat(), index=True)
+
 DATABASE_URL = "sqlite:///./drinks.db"
 
 engine = create_engine(

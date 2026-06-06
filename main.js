@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupMemoryDebugApi();
   renderHotDrinks();
   renderApp();
+  renderAgentWorkspace();
 });
 
 function setupMemoryDebugApi() {
@@ -69,6 +70,15 @@ function setupMemoryDebugApi() {
     active: () => api.fetchActiveHealthPlanApi(),
     refresh: (date = state.selectedDate) => api.refreshActiveHealthPlanApi(date)
   };
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 // Load from backend and fallback to local storage
@@ -255,6 +265,12 @@ function setupEventListeners() {
   window.addEventListener('drinkmind:intake-parsed', (e) => {
     applyParsedIntakeToForm(e.detail);
   });
+  document.getElementById('agent-refresh-btn')?.addEventListener('click', renderAgentWorkspace);
+  document.getElementById('plan-create-btn')?.addEventListener('click', handleCreateVisiblePlan);
+  document.getElementById('memory-clear-btn')?.addEventListener('click', async () => {
+    await api.clearUserPreferencesApi();
+    await renderAgentWorkspace();
+  });
 
 }
 
@@ -262,6 +278,98 @@ function setupEventListeners() {
 function getCurrentTimeString() {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+async function handleCreateVisiblePlan() {
+  const input = document.getElementById('plan-goal-input');
+  const goal = input?.value?.trim();
+  if (!goal) return;
+  await api.createHealthPlanApi(state.selectedDate, goal);
+  input.value = '';
+  await renderAgentWorkspace();
+}
+
+async function renderAgentWorkspace() {
+  await Promise.allSettled([
+    renderActivePlanPanel(),
+    renderMemoryPanel(),
+    renderTracePanel()
+  ]);
+}
+
+async function renderActivePlanPanel() {
+  const panel = document.getElementById('active-plan-panel');
+  if (!panel) return;
+  try {
+    await api.refreshActiveHealthPlanApi(state.selectedDate);
+    const data = await api.fetchActiveHealthPlanApi();
+    const plan = data.plan;
+    if (!plan) {
+      panel.className = 'agent-panel-body muted';
+      panel.textContent = 'No active plan';
+      return;
+    }
+    const current = (plan.plan_content || []).find(item => item.day === plan.current_day) || (plan.plan_content || [])[0];
+    panel.className = 'agent-panel-body';
+    panel.innerHTML = `
+      <div class="agent-kv"><span>Target</span><strong>${escapeHtml(plan.target)}</strong></div>
+      <div class="agent-kv"><span>Day</span><strong>${plan.current_day}/${plan.total_days}</strong></div>
+      ${current ? `<div class="agent-current-step">${escapeHtml(current.suggestion)}</div>` : ''}
+      <div class="agent-plan-days">
+        ${(plan.plan_content || []).map(item => `
+          <span class="plan-day-pill status-${escapeHtml(item.status)}">${item.day}</span>
+        `).join('')}
+      </div>
+    `;
+  } catch (e) {
+    panel.className = 'agent-panel-body muted';
+    panel.textContent = 'Backend unavailable';
+  }
+}
+
+async function renderMemoryPanel() {
+  const panel = document.getElementById('memory-list');
+  if (!panel) return;
+  try {
+    const data = await api.fetchUserPreferencesApi();
+    const entries = Object.entries(data.preferences || {});
+    if (entries.length === 0) {
+      panel.className = 'agent-panel-body muted';
+      panel.textContent = 'No memory';
+      return;
+    }
+    panel.className = 'agent-panel-body';
+    panel.innerHTML = entries.map(([key, value]) => `
+      <div class="agent-kv"><span>${escapeHtml(key)}</span><strong>${escapeHtml(Array.isArray(value) ? value.join(', ') : value)}</strong></div>
+    `).join('');
+  } catch (e) {
+    panel.className = 'agent-panel-body muted';
+    panel.textContent = 'Backend unavailable';
+  }
+}
+
+async function renderTracePanel() {
+  const panel = document.getElementById('trace-list');
+  if (!panel) return;
+  try {
+    const data = await api.fetchAgentTracesApi(5);
+    const traces = data.traces || [];
+    if (traces.length === 0) {
+      panel.className = 'agent-panel-body muted';
+      panel.textContent = 'No traces';
+      return;
+    }
+    panel.className = 'agent-panel-body trace-stack';
+    panel.innerHTML = traces.map(trace => `
+      <div class="trace-row">
+        <div><strong>${escapeHtml(trace.intent || 'unknown')}</strong><span>${escapeHtml(trace.final_action || '')}</span></div>
+        <small>${escapeHtml((trace.agents_called || []).join(' > '))}</small>
+      </div>
+    `).join('');
+  } catch (e) {
+    panel.className = 'agent-panel-body muted';
+    panel.textContent = 'Backend unavailable';
+  }
 }
 
 // Helper to auto-fill the log form

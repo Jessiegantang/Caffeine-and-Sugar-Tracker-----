@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -6,11 +6,22 @@ from typing import List, Dict, Any
 from pydantic import BaseModel
 import datetime
 
-from database import engine, get_db, Base, DrinkLog, SleepRecord, DrinkKnowledge, HealthPlan, ChatLog, AgentTrace, init_db
+from database import engine, get_db, Base, DrinkLog, SleepRecord, DrinkKnowledge, HealthPlan, ChatLog, AgentTrace, ProductCandidate, NutritionEvidence, init_db
 from agent import enrich_drink_data, generate_health_report, generate_companion_response, parse_intake_message
 from agents.orchestrator import run_agent_orchestrator
 from agents.memory_agent import apply_memory_updates, clear_user_memory, extract_memory_updates, read_user_memory
 from agents.health_plan_agent import create_health_plan, get_active_plan, plan_progress_summary, serialize_plan, update_plan_progress
+from agents.knowledge_acquisition_agent import (
+    add_nutrition_evidence,
+    analyze_image_with_vision,
+    approve_evidence_to_knowledge,
+    create_manual_candidate,
+    discover_product_candidates,
+    is_allowed_source,
+    serialize_candidate,
+    serialize_evidence,
+    stage_image_items,
+)
 import uuid
 import json
 
@@ -226,6 +237,35 @@ class KnowledgeInput(BaseModel):
     source: str = "前端数据库"
     confidence: float = 0.9
 
+class CandidateInput(BaseModel):
+    brand: str = None
+    name: str
+    type: str = None
+    source_url: str = None
+    source_title: str = None
+    source_snippet: str = None
+    discovery_method: str = "manual"
+    confidence: float = 0.6
+
+class DiscoveryInput(BaseModel):
+    query: str
+    max_results: int = 5
+    allowed_domains: List[str] = None
+    mode: str = "safe"
+    max_pages: int = 3
+
+class EvidenceInput(BaseModel):
+    source_url: str = None
+    source_type: str = "manual"
+    raw_evidence: str
+
+class ImageImportInput(BaseModel):
+    source_type: str = "image_upload"
+    items: List[Dict[str, Any]]
+
+class BulkIdsInput(BaseModel):
+    ids: List[str]
+
 from agent import sync_chroma_document, delete_chroma_document
 
 @app.get("/api/knowledge_base")
@@ -266,6 +306,157 @@ def delete_knowledge(kb_id: str, db: Session = Depends(get_db)):
         delete_chroma_document(kb_id)
         return {"status": "success"}
     raise HTTPException(status_code=404, detail="Knowledge not found")
+
+# --- Knowledge Acquisition Agent Endpoints ---
+
+@app.get("/api/knowledge/acquisition/candidates")
+def list_product_candidates(status: str = None, limit: int = 50, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, 100))
+    query = db.query(ProductCandidate).order_by(ProductCandidate.created_at.desc())
+    if status:
+        query = query.filter(ProductCandidate.status == status)
+    else:
+        query = query.filter(ProductCandidate.status.notin_(["imported", "deleted"]))
+    candidates = query.limit(limit).all()
+    return {"status": "success", "candidates": [serialize_candidate(candidate) for candidate in candidates]}
+
+@app.post("/api/knowledge/acquisition/candidates")
+def create_product_candidate(input_data: CandidateInput, db: Session = Depends(get_db)):
+    if input_data.source_url and not is_allowed_source(input_data.source_url):
+        raise HTTPException(status_code=400, detail="Source domain is blocked by acquisition policy")
+    candidate = create_manual_candidate(db, input_data.dict())
+    return {"status": "success", "candidate": serialize_candidate(candidate)}
+
+@app.post("/api/knowledge/acquisition/discover")
+def discover_candidates(input_data: DiscoveryInput, db: Session = Depends(get_db)):
+    result = discover_product_candidates(
+        db,
+        query=input_data.query,
+        max_results=input_data.max_results,
+        allowed_domains=input_data.allowed_domains,
+        mode=input_data.mode,
+        max_pages=input_data.max_pages,
+    )
+    return {"status": "success", **result}
+
+@app.post("/api/knowledge/acquisition/image/analyze")
+async def analyze_acquisition_image(file: UploadFile = File(...)):
+    content_type = file.content_type or ""
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are supported")
+    image_bytes = await file.read()
+    if len(image_bytes) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image is too large; max size is 8MB")
+    result = analyze_image_with_vision(image_bytes, content_type, file.filename)
+    return {"status": "success", **result}
+
+@app.post("/api/knowledge/acquisition/image/import")
+def import_acquisition_image_items(input_data: ImageImportInput, db: Session = Depends(get_db)):
+    result = stage_image_items(db, input_data.items, input_data.source_type)
+    return {"status": "success", **result}
+
+@app.get("/api/knowledge/acquisition/evidence")
+def list_nutrition_evidence(candidate_id: str = None, limit: int = 50, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, 100))
+    query = db.query(NutritionEvidence).order_by(NutritionEvidence.created_at.desc())
+    if candidate_id:
+        query = query.filter(NutritionEvidence.candidate_id == candidate_id)
+    else:
+        query = query.filter(NutritionEvidence.status.notin_(["approved", "deleted"]))
+    evidence_rows = query.limit(limit).all()
+    return {"status": "success", "evidence": [serialize_evidence(row) for row in evidence_rows]}
+
+@app.post("/api/knowledge/acquisition/candidates/{candidate_id}/evidence")
+def create_candidate_evidence(candidate_id: str, input_data: EvidenceInput, db: Session = Depends(get_db)):
+    if input_data.source_url and not is_allowed_source(input_data.source_url):
+        raise HTTPException(status_code=400, detail="Source domain is blocked by acquisition policy")
+    try:
+        evidence = add_nutrition_evidence(db, candidate_id, input_data.dict())
+        return {"status": "success", "evidence": serialize_evidence(evidence)}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/api/knowledge/acquisition/evidence/{evidence_id}/approve")
+def approve_candidate_evidence(evidence_id: str, db: Session = Depends(get_db)):
+    try:
+        kb = approve_evidence_to_knowledge(db, evidence_id)
+        sync_chroma_document(kb.id, {
+            "brand": kb.brand,
+            "name": kb.name,
+            "type": kb.type,
+            "volume": kb.volume,
+            "caffeine": kb.caffeine,
+            "baseSugar": kb.baseSugar,
+            "abv": kb.abv,
+            "source": kb.source,
+            "confidence": kb.confidence,
+        })
+        return {"status": "success", "knowledge": {c.name: getattr(kb, c.name) for c in kb.__table__.columns}}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/knowledge/acquisition/evidence/bulk_approve")
+def approve_candidate_evidence_bulk(input_data: BulkIdsInput, db: Session = Depends(get_db)):
+    approved = []
+    errors = []
+    for evidence_id in input_data.ids:
+        try:
+            kb = approve_evidence_to_knowledge(db, evidence_id)
+            sync_chroma_document(kb.id, {
+                "brand": kb.brand,
+                "name": kb.name,
+                "type": kb.type,
+                "volume": kb.volume,
+                "caffeine": kb.caffeine,
+                "baseSugar": kb.baseSugar,
+                "abv": kb.abv,
+                "source": kb.source,
+                "confidence": kb.confidence,
+            })
+            approved.append(kb.id)
+        except ValueError as e:
+            errors.append({"id": evidence_id, "error": str(e)})
+    return {"status": "success", "approved": approved, "errors": errors}
+
+@app.delete("/api/knowledge/acquisition/evidence/{evidence_id}")
+def delete_candidate_evidence(evidence_id: str, db: Session = Depends(get_db)):
+    evidence = db.query(NutritionEvidence).filter(NutritionEvidence.id == evidence_id).first()
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    evidence.status = "deleted"
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/knowledge/acquisition/evidence/bulk/delete")
+def delete_candidate_evidence_bulk(input_data: BulkIdsInput, db: Session = Depends(get_db)):
+    rows = db.query(NutritionEvidence).filter(NutritionEvidence.id.in_(input_data.ids)).all()
+    for row in rows:
+        row.status = "deleted"
+    db.commit()
+    return {"status": "success", "deleted": len(rows)}
+
+@app.delete("/api/knowledge/acquisition/candidates/{candidate_id}")
+def delete_product_candidate(candidate_id: str, db: Session = Depends(get_db)):
+    candidate = db.query(ProductCandidate).filter(ProductCandidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    candidate.status = "deleted"
+    evidence_rows = db.query(NutritionEvidence).filter(NutritionEvidence.candidate_id == candidate_id).all()
+    for row in evidence_rows:
+        row.status = "deleted"
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/knowledge/acquisition/candidates/bulk/delete")
+def delete_product_candidate_bulk(input_data: BulkIdsInput, db: Session = Depends(get_db)):
+    candidates = db.query(ProductCandidate).filter(ProductCandidate.id.in_(input_data.ids)).all()
+    for candidate in candidates:
+        candidate.status = "deleted"
+    evidence_rows = db.query(NutritionEvidence).filter(NutritionEvidence.candidate_id.in_(input_data.ids)).all()
+    for row in evidence_rows:
+        row.status = "deleted"
+    db.commit()
+    return {"status": "success", "deleted": len(candidates)}
 
 # --- Companion Chat Endpoints ---
 

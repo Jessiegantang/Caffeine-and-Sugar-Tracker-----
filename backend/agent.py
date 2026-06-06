@@ -89,6 +89,24 @@ KNOWN_BRANDS = [
     "霸王茶姬", "茶百道", "沪上阿姨", "古茗", "一点点", "可口可乐", "百事可乐"
 ]
 
+BRAND_CANONICAL_KEYS = {
+    "瑞幸咖啡": "luckin",
+    "瑞幸": "luckin",
+    "luckin coffee": "luckin",
+    "luckin": "luckin",
+    "库迪咖啡": "cotti",
+    "库迪": "cotti",
+    "cotti coffee": "cotti",
+    "cotti": "cotti",
+    "星巴克": "starbucks",
+    "starbucks": "starbucks",
+    "喜茶": "heytea",
+    "heytea": "heytea",
+    "奈雪": "nayuki",
+    "奈雪的茶": "nayuki",
+    "nayuki": "nayuki",
+}
+
 SIZE_ALIASES = [
     (250, ["小杯", "小瓶"]),
     (330, ["听装", "罐装", "一罐"]),
@@ -263,7 +281,166 @@ def parse_intake_message(user_message: str) -> dict:
         return local_result
 
 
+def _knowledge_scope(source: str | None) -> str:
+    source = source or ""
+    if "caffeine_sugar" in source:
+        return "caffeine_sugar"
+    if "caffeine_only" in source:
+        return "caffeine_only"
+    if "sugar_only" in source:
+        return "sugar_only"
+    if "alcohol_only" in source:
+        return "alcohol_only"
+    if "partial" in source:
+        return "partial"
+    return "complete"
+
+
+def _normalize_match_name(name: str | None) -> str:
+    normalized = re.sub(r"\s+", "", name or "").lower()
+    for token in ["咖啡", "饮品", "冷饮", "热饮", "标准杯", "默认杯型"]:
+        normalized = normalized.replace(token, "")
+    return normalized
+
+
+def _brand_key(brand: str | None) -> str:
+    normalized = re.sub(r"\s+", " ", (brand or "").strip().lower())
+    if normalized in BRAND_CANONICAL_KEYS:
+        return BRAND_CANONICAL_KEYS[normalized]
+    compact = normalized.replace(" ", "")
+    for alias, key in BRAND_CANONICAL_KEYS.items():
+        alias_norm = alias.lower()
+        if alias_norm.replace(" ", "") == compact:
+            return key
+    return compact
+
+
+def _find_sql_knowledge_match(db, brand: str, name: str):
+    exact = db.query(DrinkKnowledge).filter(
+        DrinkKnowledge.brand == brand,
+        DrinkKnowledge.name == name
+    ).first()
+    if exact:
+        return exact
+
+    query_name = _normalize_match_name(name)
+    if not query_name:
+        return None
+    query_brand_key = _brand_key(brand)
+    all_rows = db.query(DrinkKnowledge).all()
+    brand_rows = [row for row in all_rows if _brand_key(row.brand) == query_brand_key]
+    for row in brand_rows:
+        row_name = _normalize_match_name(row.name)
+        if row_name and (row_name == query_name or row_name in query_name or query_name in row_name):
+            return row
+    return None
+
+
+def _knowledge_field_known(scope: str, field_name: str, value=None) -> bool:
+    if scope == "complete":
+        return True
+    if scope == "caffeine_sugar":
+        return field_name in {"caffeine", "sugar"}
+    if scope == "caffeine_only":
+        return field_name == "caffeine"
+    if scope == "sugar_only":
+        return field_name == "sugar"
+    if scope == "alcohol_only":
+        return field_name == "abv"
+    if scope == "partial":
+        return value is not None and float(value or 0) > 0
+    return False
+
+
+def _sugar_from_knowledge(base_sugar: float, ratio: float, sugar_level: str, multipliers: dict) -> float:
+    db_full_sugar = float(base_sugar or 0) * ratio
+    multiplier = multipliers.get(sugar_level, 1.0)
+    natural_sugar = db_full_sugar * 0.2
+    added_sugar = db_full_sugar * 0.8 * multiplier
+    return round(natural_sugar + added_sugar, 1)
+
+
+def _estimate_nutrition_with_fallback(brand: str, name: str, drink_type: str, volume: int, sugar_level: str) -> dict:
+    try:
+        class HybridAIEstimation(BaseModel):
+            caffeine: float = Field(description="Estimated caffeine in mg.")
+            sugar: float = Field(description="Estimated sugar in g.")
+            reasoning: str = Field(description="Short reason for the estimate.")
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are DrinkMind nutrition estimator. Estimate caffeine and sugar for a beverage. "
+             "Use common nutrition assumptions: espresso is about 75mg caffeine per shot; milk has lactose; "
+             "coconut milk, oat milk, fruit tea, and juice bases can contain natural sugar even when no extra sugar is added. "
+             "Return conservative numeric estimates."),
+            ("user", "brand: {brand}\nname: {name}\ntype: {drink_type}\nvolume: {volume}ml\nsweetness: {sugar_level}")
+        ])
+        res = (prompt | llm.with_structured_output(HybridAIEstimation, method="function_calling")).invoke({
+            "brand": brand,
+            "name": name,
+            "drink_type": drink_type,
+            "volume": volume,
+            "sugar_level": sugar_level,
+        })
+        return {
+            "caffeine": round(res.caffeine, 1),
+            "sugar": round(res.sugar, 1),
+            "source": "AI model estimate",
+            "method": "LLM",
+            "confidence": 0.75,
+            "reasoning": res.reasoning,
+        }
+    except Exception as e:
+        print(f"[Hybrid AI Estimation Error] {e}", flush=True)
+        local_est = estimate_nutrition(brand, name, drink_type, volume, sugar_level)
+        return {
+            "caffeine": local_est["caffeine"],
+            "sugar": local_est["sugar"],
+            "source": local_est["source"],
+            "method": "LOCAL",
+            "confidence": local_est["confidence"],
+            "reasoning": "; ".join(local_est["reasoning"]),
+        }
+
+
+def _apply_hybrid_knowledge_result(r: dict, *, known: dict, ratio: float, source_label: str, method_prefix: str,
+                                   matched_id: str | None, retrieval_score, sugar_level: str,
+                                   multipliers: dict, brand: str, name: str, drink_type: str, volume: int) -> dict:
+    scope = _knowledge_scope(known.get("source"))
+    caffeine_known = _knowledge_field_known(scope, "caffeine", known.get("caffeine"))
+    sugar_known = _knowledge_field_known(scope, "sugar", known.get("sugar"))
+
+    if caffeine_known and sugar_known:
+        r["caffeine"] = round(float(known.get("caffeine") or 0) * ratio, 1)
+        r["sugarContent"] = _sugar_from_knowledge(known.get("sugar") or 0, ratio, sugar_level, multipliers)
+        r["data_source"] = source_label
+        r["confidence"] = known.get("confidence") or 0.8
+        r["reasoning"] = [f"{method_prefix} complete match (scaled to {volume}ml, applied sugar level '{sugar_level}')"]
+        r["estimation_method"] = method_prefix
+        r["matched_knowledge_id"] = matched_id
+        r["retrieval_score"] = retrieval_score
+        return r
+
+    estimate = _estimate_nutrition_with_fallback(brand, name, drink_type, volume, sugar_level)
+    r["caffeine"] = round(float(known.get("caffeine") or 0) * ratio, 1) if caffeine_known else estimate["caffeine"]
+    r["sugarContent"] = _sugar_from_knowledge(known.get("sugar") or 0, ratio, sugar_level, multipliers) if sugar_known else estimate["sugar"]
+    r["data_source"] = f"{source_label} + {estimate['source']}"
+    r["confidence"] = round(min(float(known.get("confidence") or 0.7), float(estimate.get("confidence") or 0.7)), 2)
+    r["reasoning"] = [
+        f"{method_prefix} partial match scope={scope}; known fields: caffeine={caffeine_known}, sugar={sugar_known}.",
+        f"Estimated missing fields via {estimate['method']}: {estimate['reasoning']}",
+    ]
+    r["estimation_method"] = f"HYBRID_{method_prefix}_{estimate['method']}"
+    r["matched_knowledge_id"] = matched_id
+    r["retrieval_score"] = retrieval_score
+    return r
+
+
 def enrich_drink_data(r: dict, db) -> dict:
+    if "caffeine" not in r and "sugarContent" not in r:
+        r["data_source"] = "用户录入"
+    if r.get("data_source") in [None, "", "用户录入", "本地算法估算", "Local Estimator (Dynamic DB)"]:
+        r["data_source"] = "用户录入"
     """
     同步估算饮品的成分。流程：
     1. 查 SQLite 精确匹配
@@ -272,7 +449,8 @@ def enrich_drink_data(r: dict, db) -> dict:
     全程不调用大模型 API。极速返回。
     """
     if r.get("data_source") not in ["用户录入", "本地算法估算"]:
-        return r  # 已经有确定数据的饮品不重复计算
+        if "caffeine" in r or "sugarContent" in r:
+            return r  # 已经有确定数据的饮品不重复计算
 
     brand = r.get("brand", "")
     name = r.get("name", "")
@@ -291,14 +469,33 @@ def enrich_drink_data(r: dict, db) -> dict:
     }
     
     # 1. 精确匹配 SQLite
-    sql_match = db.query(DrinkKnowledge).filter(
-        DrinkKnowledge.brand == brand,
-        DrinkKnowledge.name == name
-    ).first()
+    sql_match = _find_sql_knowledge_match(db, brand, name)
     
     if sql_match:
         db_volume = sql_match.volume if sql_match.volume else 500
         ratio = volume / db_volume
+        scope = _knowledge_scope(sql_match.source)
+        if scope != "complete":
+            return _apply_hybrid_knowledge_result(
+                r,
+                known={
+                    "caffeine": sql_match.caffeine,
+                    "sugar": sql_match.baseSugar,
+                    "source": sql_match.source,
+                    "confidence": sql_match.confidence,
+                },
+                ratio=ratio,
+                source_label=sql_match.source,
+                method_prefix="SQL_EXACT_MATCH",
+                matched_id=sql_match.id,
+                retrieval_score=None,
+                sugar_level=sugar_level,
+                multipliers=SWEETNESS_MULTIPLIERS,
+                brand=brand,
+                name=name,
+                drink_type=drink_type,
+                volume=volume,
+            )
         
         # 假设数据库存的 baseSugar 是全糖状态
         db_full_sugar = sql_match.baseSugar * ratio
@@ -333,13 +530,35 @@ def enrich_drink_data(r: dict, db) -> dict:
                 overlap = len(query_chars.intersection(db_chars))
                 
                 # 只有当品牌相似度高，且名字有一定重叠，或向量距离极小时才采纳
-                brand_match = brand and (brand in meta.get("brand", "") or meta.get("brand", "") in brand)
+                brand_match = brand and _brand_key(brand) == _brand_key(meta.get("brand", ""))
                 
                 # Overlap requirement: at least 1 character in common for short names, 2 for longer.
                 # Or just score is extremely good.
                 if brand_match and (overlap >= 1 or score < 0.3):
                     db_volume = meta.get("volume", 500)
                     ratio = volume / db_volume
+                    scope = _knowledge_scope(meta.get("source"))
+                    if scope != "complete":
+                        return _apply_hybrid_knowledge_result(
+                            r,
+                            known={
+                                "caffeine": meta.get("caffeine", 0),
+                                "sugar": meta.get("sugar", 0),
+                                "source": meta.get("source"),
+                                "confidence": 0.8,
+                            },
+                            ratio=ratio,
+                            source_label="RAG vector match",
+                            method_prefix="RAG_MATCH",
+                            matched_id=meta.get("id"),
+                            retrieval_score=float(score),
+                            sugar_level=sugar_level,
+                            multipliers=SWEETNESS_MULTIPLIERS,
+                            brand=brand,
+                            name=name,
+                            drink_type=drink_type,
+                            volume=volume,
+                        )
                     
                     db_full_sugar = meta.get("sugar", 0) * ratio
                     multiplier = SWEETNESS_MULTIPLIERS.get(sugar_level, 1.0)

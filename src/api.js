@@ -125,3 +125,137 @@ export async function refreshActiveHealthPlanApi(date) {
   if (!response.ok) throw new Error('Failed to refresh health plan');
   return response.json();
 }
+
+export async function fetchAgentTracesApi(limit = 5) {
+  const response = await fetch(`${API_BASE}/api/agent/traces?limit=${limit}`);
+  if (!response.ok) throw new Error('Failed to fetch agent traces');
+  return response.json();
+}
+
+export async function fetchKnowledgeCandidatesApi(status = '') {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/candidates${query}`);
+  if (!response.ok) throw new Error('Failed to fetch knowledge candidates');
+  return response.json();
+}
+
+export async function createKnowledgeCandidateApi(candidate) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/candidates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(candidate)
+  });
+  if (!response.ok) throw new Error('Failed to create knowledge candidate');
+  return response.json();
+}
+
+export async function discoverKnowledgeCandidatesApi(payload) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/discover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to discover knowledge candidates'));
+  return response.json();
+}
+
+export async function fetchKnowledgeEvidenceApi(candidateId = '') {
+  const query = candidateId ? `?candidate_id=${encodeURIComponent(candidateId)}` : '';
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/evidence${query}`);
+  if (!response.ok) throw new Error('Failed to fetch knowledge evidence');
+  return response.json();
+}
+
+export async function addKnowledgeEvidenceApi(candidateId, evidence) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/candidates/${candidateId}/evidence`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(evidence)
+  });
+  if (!response.ok) throw new Error('Failed to add knowledge evidence');
+  return response.json();
+}
+
+export async function approveKnowledgeEvidenceApi(evidenceId) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/evidence/${evidenceId}/approve`, {
+    method: 'POST'
+  });
+  if (!response.ok) throw new Error('Failed to approve knowledge evidence');
+  return response.json();
+}
+
+export async function approveKnowledgeEvidenceBulkApi(ids) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/evidence/bulk_approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids })
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to approve selected evidence'));
+  return response.json();
+}
+
+export async function deleteKnowledgeEvidenceApi(evidenceId) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/evidence/${evidenceId}`, {
+    method: 'DELETE'
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to delete knowledge evidence'));
+  return response.json();
+}
+
+export async function deleteKnowledgeEvidenceBulkApi(ids) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/evidence/bulk/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids })
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to delete selected evidence'));
+  return response.json();
+}
+
+export async function deleteKnowledgeCandidateApi(candidateId) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/candidates/${candidateId}`, {
+    method: 'DELETE'
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to delete knowledge candidate'));
+  return response.json();
+}
+
+export async function deleteKnowledgeCandidatesBulkApi(ids) {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/candidates/bulk/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids })
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to delete selected candidates'));
+  return response.json();
+}
+
+export async function analyzeKnowledgeImageApi(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/image/analyze`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to analyze knowledge image'));
+  return response.json();
+}
+
+export async function importKnowledgeImageItemsApi(items, sourceType = 'image_upload') {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/image/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items, source_type: sourceType })
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to import knowledge image items'));
+  return response.json();
+}
+
+async function readErrorMessage(response, fallback) {
+  try {
+    const data = await response.json();
+    return data.detail || data.message || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
