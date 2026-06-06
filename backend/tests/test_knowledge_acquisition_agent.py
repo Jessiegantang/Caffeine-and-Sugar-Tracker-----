@@ -1,7 +1,6 @@
 import os
 import sys
 import unittest
-from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -27,7 +26,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                     or "Test Caffeine Only Americano" in row.raw_evidence
                     or "Test Sugar Only Tea" in row.raw_evidence
                     or "Test Merge Drink" in row.raw_evidence
-                    or "Test Discovery" in row.raw_evidence
                 ):
                     db.delete(row)
             for row in db.query(ProductCandidate).filter(
@@ -37,7 +35,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                     "Test Caffeine Only Americano",
                     "Test Sugar Only Tea",
                     "Test Merge Drink",
-                    "Test Discovery Latte",
                 ])
             ).all():
                 db.delete(row)
@@ -48,7 +45,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                     "Test Caffeine Only Americano",
                     "Test Sugar Only Tea",
                     "Test Merge Drink",
-                    "Test Discovery Latte",
                 ])
             ).all():
                 db.delete(row)
@@ -248,45 +244,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
         list_response = self.client.get("/api/knowledge/acquisition/evidence")
         listed_ids = [row["id"] for row in list_response.json()["evidence"]]
         self.assertNotIn(evidence_id, listed_ids)
-
-    @patch("agents.knowledge_acquisition_agent.parse_candidate_from_text", return_value={
-        "brand": "TestBrand",
-        "name": "Test Discovery Latte",
-        "type": "coffee",
-    })
-    @patch("agents.knowledge_acquisition_agent._robots_allowed", return_value={"allowed": True, "reason": "allowed"})
-    @patch("agents.knowledge_acquisition_agent._fetch_public_page")
-    @patch("agents.knowledge_acquisition_agent._safe_search")
-    def test_autonomous_discovery_fetches_allowed_page_into_review_queue(
-        self, mock_search, mock_fetch, _mock_robots, _mock_parse
-    ):
-        mock_search.return_value = [{
-            "title": "Test Discovery Latte",
-            "body": "official nutrition caffeine 120mg sugar 18g volume 500ml",
-            "href": "https://example.com/test-discovery-latte",
-        }]
-        mock_fetch.return_value = {
-            "ok": True,
-            "url": "https://example.com/test-discovery-latte",
-            "title": "Test Discovery Latte",
-            "text": "Test Discovery Latte volume 500ml caffeine 120mg sugar 18g",
-        }
-
-        with patch.dict(os.environ, {"ENABLE_WEB_DISCOVERY": "true"}):
-            response = self.client.post("/api/knowledge/acquisition/discover", json={
-                "query": "Test Discovery Latte",
-                "mode": "autonomous",
-                "max_results": 1,
-                "max_pages": 1,
-            })
-
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["mode"], "autonomous")
-        self.assertEqual(len(body["fetched_pages"]), 1)
-        self.assertGreaterEqual(len(body["candidates"]), 1)
-        self.assertGreaterEqual(len(body["evidence"]), 1)
-
 
 if __name__ == "__main__":
     unittest.main()

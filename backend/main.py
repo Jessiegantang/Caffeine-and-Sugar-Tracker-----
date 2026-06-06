@@ -16,7 +16,6 @@ from agents.knowledge_acquisition_agent import (
     analyze_image_with_vision,
     approve_evidence_to_knowledge,
     create_manual_candidate,
-    discover_product_candidates,
     is_allowed_source,
     serialize_candidate,
     serialize_evidence,
@@ -247,13 +246,6 @@ class CandidateInput(BaseModel):
     discovery_method: str = "manual"
     confidence: float = 0.6
 
-class DiscoveryInput(BaseModel):
-    query: str
-    max_results: int = 5
-    allowed_domains: List[str] = None
-    mode: str = "safe"
-    max_pages: int = 3
-
 class EvidenceInput(BaseModel):
     source_url: str = None
     source_type: str = "manual"
@@ -326,18 +318,6 @@ def create_product_candidate(input_data: CandidateInput, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Source domain is blocked by acquisition policy")
     candidate = create_manual_candidate(db, input_data.dict())
     return {"status": "success", "candidate": serialize_candidate(candidate)}
-
-@app.post("/api/knowledge/acquisition/discover")
-def discover_candidates(input_data: DiscoveryInput, db: Session = Depends(get_db)):
-    result = discover_product_candidates(
-        db,
-        query=input_data.query,
-        max_results=input_data.max_results,
-        allowed_domains=input_data.allowed_domains,
-        mode=input_data.mode,
-        max_pages=input_data.max_pages,
-    )
-    return {"status": "success", **result}
 
 @app.post("/api/knowledge/acquisition/image/analyze")
 async def analyze_acquisition_image(file: UploadFile = File(...)):

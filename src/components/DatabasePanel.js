@@ -9,7 +9,6 @@ import {
   deleteKnowledgeCandidatesBulkApi,
   deleteKnowledgeEvidenceApi,
   deleteKnowledgeEvidenceBulkApi,
-  discoverKnowledgeCandidatesApi,
   fetchKnowledgeCandidatesApi,
   fetchKnowledgeEvidenceApi,
   importKnowledgeImageItemsApi
@@ -82,10 +81,6 @@ export function initDatabasePanel(onDatabaseChanged) {
 
   document.getElementById('stage-image-items-btn')?.addEventListener('click', () => {
     handleStageImageItems();
-  });
-
-  document.getElementById('acquisition-discover-btn')?.addEventListener('click', () => {
-    handleDiscoverAcquisition();
   });
 
   document.getElementById('acquisition-candidate-form')?.addEventListener('submit', (e) => {
@@ -503,52 +498,6 @@ function renderEvidenceItem(evidence) {
   `;
 }
 
-async function handleDiscoverAcquisition() {
-  const queryInput = document.getElementById('acquisition-discovery-query');
-  const modeInput = document.getElementById('acquisition-mode');
-  const maxPagesInput = document.getElementById('acquisition-max-pages');
-  const resultEl = document.getElementById('acquisition-discovery-result');
-  const button = document.getElementById('acquisition-discover-btn');
-  const query = queryInput?.value.trim();
-  if (!query) {
-    setDiscoveryResult('请输入采集目标', false);
-    return;
-  }
-
-  if (button) {
-    button.disabled = true;
-    button.textContent = '采集中...';
-  }
-
-  try {
-    const mode = modeInput?.value || 'safe';
-    const data = await discoverKnowledgeCandidatesApi({
-      query,
-      mode,
-      max_results: 8,
-      max_pages: parseOptionalNumber(maxPagesInput?.value) || 3
-    });
-    const skipped = data.skipped_urls?.length || 0;
-    const fetched = data.fetched_pages?.length || 0;
-    const evidenceCount = data.evidence?.length || 0;
-    setDiscoveryResult(
-      `${mode === 'autonomous' ? '自主采集' : '保守采集'}完成：候选 ${data.candidates?.length || 0} 个，证据 ${evidenceCount} 条，抓取页面 ${fetched} 个，跳过 ${skipped} 个`,
-      true
-    );
-    if (resultEl && data.policy) {
-      resultEl.title = data.policy;
-    }
-    renderKnowledgeAcquisitionPanel();
-  } catch (e) {
-    setDiscoveryResult(`采集失败：${e.message || '请确认后端已启动，并开启 ENABLE_WEB_DISCOVERY'}`, false);
-  } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = '开始采集';
-    }
-  }
-}
-
 function handleImageFileSelected(e) {
   const file = e.target.files?.[0];
   const preview = document.getElementById('acquisition-image-preview');
@@ -567,16 +516,6 @@ function handleImageFileSelected(e) {
   const url = URL.createObjectURL(file);
   preview.className = 'image-preview-box';
   preview.innerHTML = `<img src="${url}" alt="上传图片预览">`;
-}
-
-function setDiscoveryResult(message, success) {
-  const result = document.getElementById('acquisition-discovery-result');
-  if (!result) {
-    setAcquisitionResult(message, success);
-    return;
-  }
-  result.textContent = message;
-  result.className = `acquisition-result ${success ? 'success' : 'error'}`;
 }
 
 async function handleAnalyzeImage() {

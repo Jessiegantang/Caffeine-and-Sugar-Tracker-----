@@ -149,16 +149,6 @@ export async function createKnowledgeCandidateApi(candidate) {
   return response.json();
 }
 
-export async function discoverKnowledgeCandidatesApi(payload) {
-  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/discover`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to discover knowledge candidates'));
-  return response.json();
-}
-
 export async function fetchKnowledgeEvidenceApi(candidateId = '') {
   const query = candidateId ? `?candidate_id=${encodeURIComponent(candidateId)}` : '';
   const response = await fetch(`${API_BASE}/api/knowledge/acquisition/evidence${query}`);

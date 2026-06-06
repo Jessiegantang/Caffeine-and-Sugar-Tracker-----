@@ -3,14 +3,8 @@ import base64
 import json
 import os
 import re
-import time
 import uuid
-from typing import TypedDict
-from urllib import robotparser
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
-
-from langgraph.graph import END, START, StateGraph
 
 from database import DrinkKnowledge, NutritionEvidence, ProductCandidate
 
@@ -19,25 +13,6 @@ BLOCKED_DOMAINS = {
     "xiaohongshu.com",
     "xhslink.com",
 }
-
-DEFAULT_CRAWLER_USER_AGENT = "DrinkMindBot/0.1 (+local research; human-reviewed)"
-
-
-class AcquisitionGraphState(TypedDict):
-    db: object
-    query: str
-    mode: str
-    max_results: int
-    max_pages: int
-    allowed_domains: list[str] | None
-    discovered: list[dict]
-    allowed_urls: list[dict]
-    skipped_urls: list[dict]
-    fetched_pages: list[dict]
-    candidates: list[dict]
-    evidence: list[dict]
-    errors: list[dict]
-    policy: str
 
 BRAND_ALIASES = {
     "瑞幸": "瑞幸咖啡",
@@ -80,169 +55,6 @@ def create_manual_candidate(db, payload: dict) -> ProductCandidate:
     db.commit()
     db.refresh(candidate)
     return candidate
-
-
-def discover_product_candidates(
-    db,
-    query: str,
-    max_results: int = 5,
-    allowed_domains: list[str] | None = None,
-    mode: str = "safe",
-    max_pages: int | None = None,
-) -> dict:
-    state = _build_acquisition_graph().invoke({
-        "db": db,
-        "query": query,
-        "mode": mode if mode in {"safe", "autonomous"} else "safe",
-        "max_results": max(1, min(max_results or 5, 10)),
-        "max_pages": max(0, min(max_pages if max_pages is not None else 3, 10)),
-        "allowed_domains": allowed_domains,
-        "discovered": [],
-        "allowed_urls": [],
-        "skipped_urls": [],
-        "fetched_pages": [],
-        "candidates": [],
-        "evidence": [],
-        "errors": [],
-        "policy": "",
-    })
-
-    return {
-        "mode": state["mode"],
-        "policy": state["policy"],
-        "discovered": state["discovered"],
-        "allowed_urls": state["allowed_urls"],
-        "skipped_urls": state["skipped_urls"],
-        "fetched_pages": _summarize_fetched_pages(state["fetched_pages"]),
-        "candidates": state["candidates"],
-        "evidence": state["evidence"],
-        "errors": state["errors"],
-    }
-
-
-def _build_acquisition_graph():
-    graph = StateGraph(AcquisitionGraphState)
-    graph.add_node("discover", _discovery_node)
-    graph.add_node("policy_guard", _policy_guard_node)
-    graph.add_node("fetch", _fetch_node)
-    graph.add_node("extract_and_stage", _extract_and_stage_node)
-    graph.add_edge(START, "discover")
-    graph.add_edge("discover", "policy_guard")
-    graph.add_conditional_edges(
-        "policy_guard",
-        lambda state: "fetch" if state["mode"] == "autonomous" else "extract_and_stage",
-        {"fetch": "fetch", "extract_and_stage": "extract_and_stage"},
-    )
-    graph.add_edge("fetch", "extract_and_stage")
-    graph.add_edge("extract_and_stage", END)
-    return graph.compile()
-
-
-def _discovery_node(state: AcquisitionGraphState) -> AcquisitionGraphState:
-    if not os.getenv("ENABLE_WEB_DISCOVERY", "").lower() in {"1", "true", "yes"}:
-        state["policy"] = "Web discovery disabled. Set ENABLE_WEB_DISCOVERY=true to search the web."
-        return state
-    state["discovered"] = _safe_search(state["query"], max_results=state["max_results"])
-    state["policy"] = "Safe mode uses search-result metadata only. Autonomous mode may fetch allowed public pages."
-    return state
-
-
-def _policy_guard_node(state: AcquisitionGraphState) -> AcquisitionGraphState:
-    allowed = []
-    skipped = []
-    for item in state["discovered"]:
-        url = item.get("href") or item.get("url") or ""
-        if not url:
-            skipped.append({"url": url, "reason": "missing_url", "title": item.get("title")})
-            continue
-        if not is_allowed_source(url, state.get("allowed_domains")):
-            skipped.append({"url": url, "reason": "blocked_domain", "title": item.get("title")})
-            continue
-        if state["mode"] == "autonomous":
-            robot_result = _robots_allowed(url)
-            if not robot_result["allowed"]:
-                skipped.append({"url": url, "reason": robot_result["reason"], "title": item.get("title")})
-                continue
-        allowed.append(item)
-    state["allowed_urls"] = allowed
-    state["skipped_urls"] = skipped
-    return state
-
-
-def _fetch_node(state: AcquisitionGraphState) -> AcquisitionGraphState:
-    fetched = []
-    errors = list(state["errors"])
-    delay_seconds = float(os.getenv("CRAWLER_DELAY_SECONDS", "0.5") or 0.5)
-    for item in state["allowed_urls"][:state["max_pages"]]:
-        url = item.get("href") or item.get("url") or ""
-        page = _fetch_public_page(url)
-        if page.get("ok"):
-            page["title"] = item.get("title") or page.get("title")
-            page["snippet"] = item.get("body") or item.get("snippet")
-            fetched.append(page)
-        else:
-            errors.append({"url": url, "error": page.get("error") or "fetch_failed"})
-        if delay_seconds > 0:
-            time.sleep(min(delay_seconds, 3.0))
-    state["fetched_pages"] = fetched
-    state["errors"] = errors
-    return state
-
-
-def _extract_and_stage_node(state: AcquisitionGraphState) -> AcquisitionGraphState:
-    db = state["db"]
-    candidates = []
-    evidence_rows = []
-
-    if state["mode"] == "safe":
-        source_rows = [
-            {
-                "url": item.get("href") or item.get("url"),
-                "title": item.get("title") or "",
-                "text": f"{item.get('title') or ''} {item.get('body') or item.get('snippet') or ''}",
-                "method": "safe_search_metadata",
-                "confidence": 0.5,
-            }
-            for item in state["allowed_urls"]
-        ]
-    else:
-        source_rows = [
-            {
-                "url": page.get("url"),
-                "title": page.get("title") or "",
-                "text": f"{page.get('title') or ''}\n{page.get('snippet') or ''}\n{page.get('text') or ''}",
-                "method": "autonomous_public_page",
-                "confidence": 0.58,
-            }
-            for page in state["fetched_pages"]
-        ]
-
-    for row in source_rows:
-        parsed = parse_candidate_from_text(row["text"])
-        if not parsed.get("name"):
-            continue
-        candidate = create_manual_candidate(db, {
-            **parsed,
-            "source_url": row["url"],
-            "source_title": row["title"],
-            "source_snippet": _trim_text(row["text"], 500),
-            "discovery_method": row["method"],
-            "confidence": row["confidence"],
-        })
-        candidates.append(serialize_candidate(candidate))
-
-        extracted = extract_nutrition_fields(row["text"])
-        if _has_minimum_nutrition(extracted):
-            evidence = add_nutrition_evidence(db, candidate.id, {
-                "source_type": "crawler_page" if state["mode"] == "autonomous" else "search_snippet",
-                "source_url": row["url"],
-                "raw_evidence": _trim_text(row["text"], 1800),
-            })
-            evidence_rows.append(serialize_evidence(evidence))
-
-    state["candidates"] = candidates
-    state["evidence"] = evidence_rows
-    return state
 
 
 def add_nutrition_evidence(db, candidate_id: str, payload: dict) -> NutritionEvidence:
@@ -554,12 +366,10 @@ def score_evidence(source_type: str, extracted: dict, raw_text: str) -> float:
         "nutrition_label": 0.82,
         "community_measurement": 0.62,
         "manual": 0.58,
-        "search_snippet": 0.45,
         "image_upload": 0.68,
         "official_image": 0.78,
         "nutrition_label_image": 0.82,
         "community_screenshot": 0.55,
-        "crawler_page": 0.6,
     }.get(source_type, 0.5)
     fields = sum(1 for key in ["volume", "caffeine", "sugar", "abv"] if extracted.get(key) is not None)
     if fields >= 3:
@@ -674,92 +484,3 @@ def _extract_number(text: str, patterns: list[str]):
 
 def _has_minimum_nutrition(extracted: dict) -> bool:
     return extracted.get("caffeine") is not None or extracted.get("sugar") is not None or extracted.get("abv") is not None
-
-
-def _safe_search(query: str, max_results: int = 5) -> list[dict]:
-    try:
-        from duckduckgo_search import DDGS
-
-        with DDGS() as ddgs:
-            return list(ddgs.text(query, max_results=max(1, min(max_results, 10))))
-    except Exception as e:
-        return [{"title": "Search unavailable", "body": str(e), "href": ""}]
-
-
-def _robots_allowed(url: str) -> dict:
-    parsed = urlparse(url)
-    if not parsed.scheme or not parsed.netloc:
-        return {"allowed": False, "reason": "invalid_url"}
-    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-    rp = robotparser.RobotFileParser()
-    rp.set_url(robots_url)
-    try:
-        rp.read()
-        allowed = rp.can_fetch(DEFAULT_CRAWLER_USER_AGENT, url)
-        return {"allowed": bool(allowed), "reason": "robots_disallow" if not allowed else "allowed"}
-    except Exception:
-        return {"allowed": True, "reason": "robots_unavailable_assume_public"}
-
-
-def _fetch_public_page(url: str) -> dict:
-    try:
-        request = Request(
-            url,
-            headers={
-                "User-Agent": DEFAULT_CRAWLER_USER_AGENT,
-                "Accept": "text/html,text/plain;q=0.9,*/*;q=0.5",
-            },
-        )
-        timeout = float(os.getenv("CRAWLER_TIMEOUT_SECONDS", "8") or 8)
-        max_bytes = int(os.getenv("CRAWLER_MAX_BYTES", str(1024 * 1024)) or 1024 * 1024)
-        with urlopen(request, timeout=timeout) as response:
-            content_type = response.headers.get("content-type", "")
-            if not any(kind in content_type.lower() for kind in ["text/html", "text/plain", "application/xhtml"]):
-                return {"ok": False, "url": url, "error": f"unsupported_content_type:{content_type}"}
-            raw = response.read(max_bytes)
-        text = raw.decode("utf-8", errors="ignore")
-        page_text = _html_to_text(text)
-        title = _extract_title(text)
-        return {
-            "ok": True,
-            "url": url,
-            "title": title,
-            "text": _trim_text(page_text, 8000),
-        }
-    except Exception as e:
-        return {"ok": False, "url": url, "error": str(e)}
-
-
-def _extract_title(html: str) -> str:
-    match = re.search(r"<title[^>]*>(.*?)</title>", html or "", flags=re.I | re.S)
-    if not match:
-        return ""
-    return re.sub(r"\s+", " ", _strip_tags(match.group(1))).strip()
-
-
-def _html_to_text(html: str) -> str:
-    text = re.sub(r"<script[^>]*>.*?</script>", " ", html or "", flags=re.I | re.S)
-    text = re.sub(r"<style[^>]*>.*?</style>", " ", text, flags=re.I | re.S)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _strip_tags(text: str) -> str:
-    return re.sub(r"<[^>]+>", " ", text or "")
-
-
-def _trim_text(text: str, limit: int) -> str:
-    text = re.sub(r"\s+", " ", text or "").strip()
-    return text[:limit]
-
-
-def _summarize_fetched_pages(pages: list[dict]) -> list[dict]:
-    return [
-        {
-            "url": page.get("url"),
-            "title": page.get("title"),
-            "text_preview": _trim_text(page.get("text") or "", 200),
-        }
-        for page in pages
-    ]

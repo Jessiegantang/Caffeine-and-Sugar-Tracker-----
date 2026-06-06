@@ -1399,18 +1399,6 @@ header {
   border-radius: 0.5rem;
 }
 
-.acquisition-discovery-panel {
-  padding: 1rem;
-  margin-bottom: 1rem;
-  background: #f7fbfa;
-  border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
-}
-
-.compact-number-field {
-  max-width: 96px;
-}
-
 .image-upload-row {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto;

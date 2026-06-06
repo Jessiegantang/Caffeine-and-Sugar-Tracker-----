@@ -7,7 +7,6 @@ pydantic
 python-dotenv
 python-multipart
 sqlalchemy
-duckduckgo-search
 langchain-community
 chromadb
 tiktoken
