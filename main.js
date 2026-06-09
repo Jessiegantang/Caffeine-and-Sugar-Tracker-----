@@ -892,6 +892,10 @@ function renderDailyLogs(dateLogs) {
       const sugarText = getSugarTextCN(log.sugar);
       const alcoholText = log.alcoholContent ? `<div class="log-stat-item"><span class="log-stat-label">估算酒精</span><span class="log-stat-val alcohol-num">${log.alcoholContent} g</span></div>` : '';
 
+      const explainabilityBadge = log.explainability
+        ? '<span class="log-explainability-badge is-saved">Explainable</span>'
+        : '<span class="log-explainability-badge is-missing">No reasoning saved</span>';
+
       const logCard = document.createElement('div');
       logCard.className = `log-card type-${log.type}`;
       logCard.tabIndex = 0;
@@ -905,6 +909,7 @@ function renderDailyLogs(dateLogs) {
               ${log.brand ? `<span class="log-brand">${log.brand}</span>` : ''}
               <span class="log-name">${log.name}</span>
               <span class="log-type-badge">${getTypeTextCN(log.type)}</span>
+              ${explainabilityBadge}
             </div>
             <div class="log-time-range">
               ⏰ 饮用时间：${log.startTime} - ${log.endTime} (${log.volume}ml | ${sugarText})

@@ -1726,6 +1726,28 @@ header {
   font-weight: 700;
 }
 
+.log-explainability-badge {
+  flex-shrink: 0;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.log-explainability-badge.is-saved {
+  background: rgba(35, 106, 98, 0.1);
+  color: #236a62;
+  border-color: rgba(35, 106, 98, 0.25);
+}
+
+.log-explainability-badge.is-missing {
+  background: rgba(100, 116, 139, 0.08);
+  color: var(--text-muted);
+}
+
 .acquisition-empty {
   padding: 1rem;
   border: 1px dashed var(--border-color);
