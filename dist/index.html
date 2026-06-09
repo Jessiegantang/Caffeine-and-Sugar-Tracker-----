@@ -12,8 +12,8 @@
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
     rel="stylesheet">
   <!-- Main Stylesheet -->
-  <script type="module" crossorigin src="/assets/index-BmbC5I1c.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-mh9WoMtB.css">
+  <script type="module" crossorigin src="/assets/index-C90FLuDp.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DW876gEd.css">
 </head>
 
 <body>
@@ -61,6 +61,7 @@
         </svg>
         数据库管理
       </button>
+      <a class="agent-jump-btn" href="#agent-workspace">Agent Workspace</a>
     </div>
 
     <!-- Main Workspace Layout -->
@@ -419,6 +420,48 @@
                 </div>
               </section>
 
+              <section class="agent-workspace-section card glass" id="agent-workspace">
+                <div class="section-header-row">
+                  <h3 class="card-title">Agent Workspace</h3>
+                  <button type="button" class="agent-small-btn" id="agent-refresh-btn">Refresh</button>
+                </div>
+
+                <div class="agent-workspace-grid">
+                  <div class="agent-panel">
+                    <div class="agent-panel-header">
+                      <span>Health Plan</span>
+                    </div>
+                    <div class="agent-plan-create">
+                      <input type="text" id="plan-goal-input" class="form-control" placeholder="一周内减少奶茶糖分">
+                      <button type="button" class="agent-small-btn primary" id="plan-create-btn">Create</button>
+                    </div>
+                    <div id="active-plan-panel" class="agent-panel-body muted">No active plan</div>
+                  </div>
+
+                  <div class="agent-panel">
+                    <div class="agent-panel-header">
+                      <span>Memory</span>
+                      <button type="button" class="agent-icon-btn" id="memory-clear-btn" title="Clear memory">Clear</button>
+                    </div>
+                    <div id="memory-list" class="agent-panel-body muted">No memory</div>
+                  </div>
+
+                  <div class="agent-panel">
+                    <div class="agent-panel-header">
+                      <span>Trace</span>
+                    </div>
+                    <div id="trace-list" class="agent-panel-body muted">No traces</div>
+                  </div>
+
+                  <div class="agent-panel nutrition-explainability-panel">
+                    <div class="agent-panel-header">
+                      <span>Nutrition Explainability</span>
+                    </div>
+                    <div id="nutrition-explainability-panel" class="agent-panel-body muted">No nutrition estimate yet</div>
+                  </div>
+                </div>
+              </section>
+
               <!-- Dynamic Daily Insights -->
               <section class="insights-section card glass">
                 <h3 class="card-title">该日摄入分析报告</h3>
@@ -549,6 +592,122 @@
             <div class="db-stat-item">
               <span class="db-stat-value" id="db-custom-count">0</span>
               <span class="db-stat-label">自定义饮品</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Knowledge Acquisition Agent -->
+        <section class="knowledge-acquisition-section card glass">
+          <div class="section-header-row">
+            <h3 class="card-title">知识采集审核</h3>
+            <span class="badge count-badge" id="acquisition-candidate-count">0</span>
+          </div>
+          <div class="image-acquisition-panel">
+            <div class="image-upload-row">
+              <div class="form-group flex-2">
+                <label for="acquisition-image-file">上传菜单/营养表图片</label>
+                <input type="file" id="acquisition-image-file" accept="image/*">
+              </div>
+              <div class="form-group flex-1">
+                <label for="image-source-type">图片来源</label>
+                <select id="image-source-type">
+                  <option value="image_upload">普通图片</option>
+                  <option value="official_image">官方图片</option>
+                  <option value="nutrition_label_image">营养表图片</option>
+                  <option value="community_screenshot">用户截图</option>
+                </select>
+              </div>
+              <button type="button" id="analyze-image-btn" class="btn btn-primary">识别图片</button>
+            </div>
+            <div class="image-preview-grid">
+              <div id="acquisition-image-preview" class="image-preview-empty">暂无图片</div>
+              <div>
+                <div class="section-header-row compact-row">
+                  <h4 class="subsection-title">图片识别结果</h4>
+                  <button type="button" id="stage-image-items-btn" class="btn btn-primary" disabled>批量加入审核</button>
+                </div>
+                <div id="image-analysis-result" class="image-analysis-result"></div>
+              </div>
+            </div>
+          </div>
+          <div class="acquisition-grid">
+            <form id="acquisition-candidate-form" class="acquisition-form" autocomplete="off">
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label for="acquisition-brand">品牌</label>
+                  <input type="text" id="acquisition-brand" placeholder="例如：瑞幸咖啡">
+                </div>
+                <div class="form-group flex-2">
+                  <label for="acquisition-name">候选饮品 <span class="required">*</span></label>
+                  <input type="text" id="acquisition-name" placeholder="例如：新品拿铁" required>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label for="acquisition-type">类型</label>
+                  <select id="acquisition-type">
+                    <option value="coffee">咖啡</option>
+                    <option value="teacoffee">茶咖</option>
+                    <option value="tea">原叶茶</option>
+                    <option value="milktea">奶茶</option>
+                    <option value="fruittea">果茶</option>
+                    <option value="soda">汽水</option>
+                    <option value="alcohol">酒精</option>
+                  </select>
+                </div>
+                <div class="form-group flex-2">
+                  <label for="acquisition-source-url">来源链接</label>
+                  <input type="url" id="acquisition-source-url" placeholder="https://example.com">
+                </div>
+              </div>
+              <button type="submit" class="submit-btn">创建候选</button>
+            </form>
+
+            <form id="acquisition-evidence-form" class="acquisition-form" autocomplete="off">
+              <div class="form-row">
+                <div class="form-group flex-2">
+                  <label for="evidence-candidate-select">候选饮品 <span class="required">*</span></label>
+                  <select id="evidence-candidate-select" required></select>
+                </div>
+                <div class="form-group flex-1">
+                  <label for="evidence-source-type">证据类型</label>
+                  <select id="evidence-source-type">
+                    <option value="official">官方</option>
+                    <option value="nutrition_label">营养表</option>
+                    <option value="community_measurement">实测</option>
+                    <option value="manual">手动</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="evidence-source-url">证据链接</label>
+                <input type="url" id="evidence-source-url" placeholder="https://example.com">
+              </div>
+              <div class="form-group">
+                <label for="evidence-raw">证据文本 <span class="required">*</span></label>
+                <textarea id="evidence-raw" rows="4" placeholder="例如：容量 500ml 咖啡因: 120mg 糖分: 18g" required></textarea>
+              </div>
+              <button type="submit" class="submit-btn">抽取证据</button>
+            </form>
+          </div>
+          <div id="acquisition-result" class="acquisition-result"></div>
+          <div class="acquisition-lists">
+            <div>
+              <div class="section-header-row compact-row">
+                <h4 class="subsection-title">候选列表</h4>
+                <button type="button" id="bulk-delete-candidates-btn" class="mini-danger-btn">批量删除</button>
+              </div>
+              <div id="acquisition-candidates-list" class="acquisition-list"></div>
+            </div>
+            <div>
+              <div class="section-header-row compact-row">
+                <h4 class="subsection-title">证据列表</h4>
+                <div class="bulk-actions">
+                  <button type="button" id="bulk-approve-evidence-btn" class="btn btn-primary">批量入库</button>
+                  <button type="button" id="bulk-delete-evidence-btn" class="mini-danger-btn">批量删除</button>
+                </div>
+              </div>
+              <div id="acquisition-evidence-list" class="acquisition-list"></div>
             </div>
           </div>
         </section>
