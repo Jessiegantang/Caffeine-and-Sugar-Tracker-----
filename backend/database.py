@@ -30,6 +30,8 @@ class DrinkLog(Base):
     matched_knowledge_id = Column(String, nullable=True)
     retrieval_score = Column(Float, nullable=True)
     agent_trace_id = Column(String, nullable=True)
+    composition_json = Column(String, nullable=True)
+    explainability_json = Column(String, nullable=True)
 
 import datetime
 
@@ -169,6 +171,12 @@ def auto_migrate_db():
             if 'agent_trace_id' not in columns:
                 conn.execute(text("ALTER TABLE drink_logs ADD COLUMN agent_trace_id VARCHAR"))
                 print("Migrated DB: Added 'agent_trace_id' column.")
+            if 'composition_json' not in columns:
+                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN composition_json VARCHAR"))
+                print("Migrated DB: Added 'composition_json' column.")
+            if 'explainability_json' not in columns:
+                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN explainability_json VARCHAR"))
+                print("Migrated DB: Added 'explainability_json' column.")
             conn.commit()
     except Exception as e:
         print(f"Auto-migration failed: {e}")

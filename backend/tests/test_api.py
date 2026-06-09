@@ -18,7 +18,11 @@ class ApiTests(unittest.TestCase):
     def tearDown(self):
         db = SessionLocal()
         try:
-            for log in db.query(DrinkLog).filter(DrinkLog.id == "test_api_composition_log").all():
+            for log in db.query(DrinkLog).filter(DrinkLog.id.in_([
+                "test_api_composition_log",
+                "test_api_legacy_log",
+                "test_api_bad_json_log",
+            ])).all():
                 db.delete(log)
             for plan in db.query(HealthPlan).filter(HealthPlan.id.like("plan_%")).all():
                 if plan.target in {"reduce_sugar", "reduce_caffeine", "work_week_strategy", "balanced_drink_routine"}:
@@ -110,10 +114,68 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(log.estimation_method, "COMPOSITION_ESTIMATION")
             self.assertGreater(log.caffeine, 0)
             self.assertGreater(log.sugarContent, 0)
+            self.assertTrue(log.composition_json)
+            self.assertTrue(log.explainability_json)
             self.assertFalse(hasattr(log, "composition"))
             self.assertFalse(hasattr(log, "explainability"))
         finally:
             db.close()
+
+        logs_response = self.client.get("/api/logs")
+        self.assertEqual(logs_response.status_code, 200)
+        saved = next(row for row in logs_response.json() if row["id"] == "test_api_composition_log")
+        self.assertIsInstance(saved["composition"], dict)
+        self.assertIsInstance(saved["explainability"], dict)
+        self.assertTrue(saved["explainability"]["components"])
+
+    def test_logs_api_handles_legacy_and_bad_explainability_json(self):
+        db = SessionLocal()
+        try:
+            db.add(DrinkLog(
+                id="test_api_legacy_log",
+                date="2026-06-04",
+                brand="Legacy",
+                name="Legacy Americano",
+                type="coffee",
+                sugar="none",
+                volume=500,
+                startTime="09:00",
+                endTime="09:10",
+                caffeine=120,
+                sugarContent=0,
+                alcoholContent=0,
+                abv=0,
+                status="active",
+            ))
+            db.add(DrinkLog(
+                id="test_api_bad_json_log",
+                date="2026-06-04",
+                brand="BadJson",
+                name="Bad Json Latte",
+                type="coffee",
+                sugar="half",
+                volume=500,
+                startTime="11:00",
+                endTime="11:10",
+                caffeine=100,
+                sugarContent=10,
+                alcoholContent=0,
+                abv=0,
+                status="active",
+                composition_json="{bad",
+                explainability_json="{bad",
+            ))
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.get("/api/logs")
+        self.assertEqual(response.status_code, 200)
+        rows = {row["id"]: row for row in response.json()}
+        self.assertIsNone(rows["test_api_legacy_log"]["composition"])
+        self.assertIsNone(rows["test_api_legacy_log"]["explainability"])
+        self.assertIsNone(rows["test_api_bad_json_log"]["composition"])
+        self.assertIsNone(rows["test_api_bad_json_log"]["explainability"])
 
 
 if __name__ == "__main__":

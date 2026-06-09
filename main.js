@@ -429,6 +429,50 @@ function renderNutritionExplainabilityPanel() {
   `;
 }
 
+function showLogExplainability(log) {
+  if (!log) return;
+  if (log.explainability) {
+    state.lastNutritionResult = {
+      caffeine: log.caffeine,
+      sugarContent: log.sugarContent,
+      confidence: log.confidence,
+      estimation_method: log.estimation_method,
+      data_source: log.data_source,
+      matched_knowledge_id: log.matched_knowledge_id,
+      retrieval_score: log.retrieval_score,
+      reasoning: normalizeTextList(log.reasoning),
+      composition: log.composition || null,
+      explainability: log.explainability
+    };
+  } else {
+    state.lastNutritionResult = {
+      caffeine: log.caffeine,
+      sugarContent: log.sugarContent,
+      confidence: log.confidence,
+      estimation_method: log.estimation_method || 'Unknown',
+      data_source: log.data_source || 'Unknown',
+      matched_knowledge_id: log.matched_knowledge_id || null,
+      retrieval_score: log.retrieval_score ?? null,
+      reasoning: ['No explainability saved for this log'],
+      composition: null,
+      explainability: {
+        method: log.estimation_method || 'Unknown',
+        used_composition: false,
+        used_knowledge_match: Boolean(log.matched_knowledge_id),
+        matched_knowledge_id: log.matched_knowledge_id || null,
+        retrieval_score: log.retrieval_score ?? null,
+        confidence: log.confidence ?? 0,
+        reasoning: ['No explainability saved for this log'],
+        components: [],
+        assumptions: [],
+        warnings: ['No explainability saved for this log']
+      }
+    };
+  }
+  renderNutritionExplainabilityPanel();
+  document.getElementById('agent-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderNutritionMetric(label, value) {
   return `
     <div class="nutrition-metric">
@@ -850,6 +894,8 @@ function renderDailyLogs(dateLogs) {
 
       const logCard = document.createElement('div');
       logCard.className = `log-card type-${log.type}`;
+      logCard.tabIndex = 0;
+      logCard.title = 'View saved nutrition explainability';
 
       logCard.innerHTML = `
         <div class="log-card-left">
@@ -893,6 +939,16 @@ function renderDailyLogs(dateLogs) {
       `;
 
       logCard.querySelector('.log-del-btn').addEventListener('click', () => deleteLog(log.id));
+      logCard.addEventListener('click', (event) => {
+        if (event.target.closest('.log-del-btn')) return;
+        showLogExplainability(log);
+      });
+      logCard.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          showLogExplainability(log);
+        }
+      });
       elements.logsGrid.appendChild(logCard);
     });
   }

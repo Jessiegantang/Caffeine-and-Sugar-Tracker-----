@@ -72,6 +72,10 @@ def drink_log_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     payload = {key: value for key, value in data.items() if key in allowed_columns}
     if isinstance(payload.get("reasoning"), (list, dict)):
         payload["reasoning"] = json.dumps(payload["reasoning"], ensure_ascii=False)
+    if data.get("composition") is not None:
+        payload["composition_json"] = json.dumps(data.get("composition"), ensure_ascii=False)
+    if data.get("explainability") is not None:
+        payload["explainability_json"] = json.dumps(data.get("explainability"), ensure_ascii=False)
     return payload
 
 
@@ -89,6 +93,22 @@ def nutrition_result_payload(data: Dict[str, Any]) -> Dict[str, Any]:
         "explainability",
     ]
     return {key: data.get(key) for key in keys}
+
+
+def safe_json_loads(value: str | None, default=None):
+    if not value:
+        return default
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def serialize_drink_log(log: DrinkLog) -> Dict[str, Any]:
+    row = {c.name: getattr(log, c.name) for c in log.__table__.columns}
+    row["composition"] = safe_json_loads(row.get("composition_json"), None)
+    row["explainability"] = safe_json_loads(row.get("explainability_json"), None)
+    return row
 
 # Pydantic models for incoming data
 class DrinkInput(BaseModel):
@@ -127,10 +147,7 @@ class IntakeParseInput(BaseModel):
 def get_logs(db: Session = Depends(get_db)):
     logs = db.query(DrinkLog).filter(DrinkLog.status == 'active').all()
     # Convert SQLAlchemy objects to dict
-    result = []
-    for log in logs:
-        result.append({c.name: getattr(log, c.name) for c in log.__table__.columns})
-    return result
+    return [serialize_drink_log(log) for log in logs]
 
 @app.post("/api/sync_logs")
 def sync_logs(logs: List[DrinkInput], db: Session = Depends(get_db)):
