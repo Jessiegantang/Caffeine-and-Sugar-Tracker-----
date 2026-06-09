@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { fetchChatHistoryApi, sendChatMessageApi } from '../api.js';
+import { agentActApi, fetchChatHistoryApi, sendChatMessageApi } from '../api.js';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -118,6 +118,23 @@ export async function handleSendMessage() {
     const data = await sendChatMessageApi(state.selectedDate, message);
     await fetchChatHistory();
     appendParsedIntake(data.parsed_intake);
+    if (
+      data.parsed_intake &&
+      data.parsed_intake.intent === 'log_drink' &&
+      (!data.parsed_intake.missing_fields || data.parsed_intake.missing_fields.length === 0)
+    ) {
+      try {
+        const action = await agentActApi(state.selectedDate, message);
+        const nutritionResult = action.agent_state?.nutrition_result;
+        if (nutritionResult) {
+          window.dispatchEvent(new CustomEvent('drinkmind:nutrition-result', {
+            detail: nutritionResult
+          }));
+        }
+      } catch (agentError) {
+        console.error('Agent act estimate failed', agentError);
+      }
+    }
   } catch (e) {
     console.error('Chat error', e);
     alert('发送失败，请检查网络');

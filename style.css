@@ -909,6 +909,117 @@ header {
   color: var(--text-muted);
 }
 
+.nutrition-explainability-panel {
+  grid-column: 1 / -1;
+}
+
+.nutrition-explainability-body {
+  gap: 0.75rem;
+}
+
+.nutrition-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.nutrition-metric {
+  min-width: 0;
+  padding: 0.6rem;
+  border-radius: 0.45rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.nutrition-metric span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin-bottom: 0.2rem;
+}
+
+.nutrition-metric strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.nutrition-explain-section {
+  padding: 0.65rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--border-color);
+}
+
+.nutrition-explain-section.tone-warning {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.nutrition-explain-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.45rem;
+}
+
+.nutrition-empty-note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.nutrition-component-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.nutrition-component-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) 0.75fr 0.65fr 0.65fr 0.65fr;
+  gap: 0.5rem;
+  align-items: start;
+  padding: 0.55rem;
+  border-radius: 0.45rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  font-size: 0.78rem;
+}
+
+.nutrition-component-row strong,
+.nutrition-component-row span,
+.nutrition-component-row div,
+.nutrition-component-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nutrition-component-row strong {
+  display: block;
+  color: var(--text-primary);
+}
+
+.nutrition-component-row span,
+.nutrition-component-row small {
+  color: var(--text-muted);
+}
+
+.nutrition-component-row small {
+  grid-column: 1 / -1;
+}
+
+.nutrition-text-list {
+  margin: 0;
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.nutrition-text-list li + li {
+  margin-top: 0.25rem;
+}
+
 /* Calendar Header (Week Days) */
 .calendar-week-head {
   display: grid;

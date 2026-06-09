@@ -74,6 +74,22 @@ def drink_log_payload(data: Dict[str, Any]) -> Dict[str, Any]:
         payload["reasoning"] = json.dumps(payload["reasoning"], ensure_ascii=False)
     return payload
 
+
+def nutrition_result_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    keys = [
+        "caffeine",
+        "sugarContent",
+        "confidence",
+        "estimation_method",
+        "data_source",
+        "matched_knowledge_id",
+        "retrieval_score",
+        "reasoning",
+        "composition",
+        "explainability",
+    ]
+    return {key: data.get(key) for key in keys}
+
 # Pydantic models for incoming data
 class DrinkInput(BaseModel):
     id: str
@@ -161,6 +177,7 @@ def log_drink(drink: DrinkInput, db: Session = Depends(get_db)):
     insights = get_daily_insights(drink.date, db)
     return {
         "status": "success",
+        "nutrition_result": nutrition_result_payload(enriched_drink),
         "agent_analysis": insights
     }
 

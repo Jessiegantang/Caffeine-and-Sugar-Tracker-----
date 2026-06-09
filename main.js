@@ -265,6 +265,10 @@ function setupEventListeners() {
   window.addEventListener('drinkmind:intake-parsed', (e) => {
     applyParsedIntakeToForm(e.detail);
   });
+  window.addEventListener('drinkmind:nutrition-result', (e) => {
+    state.lastNutritionResult = e.detail || null;
+    renderNutritionExplainabilityPanel();
+  });
   document.getElementById('agent-refresh-btn')?.addEventListener('click', renderAgentWorkspace);
   document.getElementById('plan-create-btn')?.addEventListener('click', handleCreateVisiblePlan);
   document.getElementById('memory-clear-btn')?.addEventListener('click', async () => {
@@ -295,6 +299,7 @@ async function renderAgentWorkspace() {
     renderMemoryPanel(),
     renderTracePanel()
   ]);
+  renderNutritionExplainabilityPanel();
 }
 
 async function renderActivePlanPanel() {
@@ -370,6 +375,127 @@ async function renderTracePanel() {
     panel.className = 'agent-panel-body muted';
     panel.textContent = 'Backend unavailable';
   }
+}
+
+function renderNutritionExplainabilityPanel() {
+  const panel = elements.nutritionExplainabilityPanel || document.getElementById('nutrition-explainability-panel');
+  if (!panel) return;
+
+  const result = state.lastNutritionResult;
+  if (!result) {
+    panel.className = 'agent-panel-body muted';
+    panel.textContent = 'No nutrition estimate yet';
+    return;
+  }
+
+  const explainability = result.explainability || {};
+  const components = explainability.components || result.composition?.components || [];
+  const reasoning = explainability.reasoning || result.reasoning || [];
+  const assumptions = explainability.assumptions || result.composition?.assumptions || [];
+  const warnings = explainability.warnings || result.composition?.warnings || [];
+  const usedComposition = Boolean(explainability.used_composition);
+  const usedKnowledge = Boolean(explainability.used_knowledge_match);
+  const retrievalScore = explainability.retrieval_score ?? result.retrieval_score;
+  const matchedId = explainability.matched_knowledge_id ?? result.matched_knowledge_id;
+
+  panel.className = 'agent-panel-body nutrition-explainability-body';
+  panel.innerHTML = `
+    <div class="nutrition-summary-grid">
+      ${renderNutritionMetric('Method', result.estimation_method || explainability.method || 'Unknown')}
+      ${renderNutritionMetric('Source', result.data_source || 'Unknown')}
+      ${renderNutritionMetric('Confidence', formatConfidence(result.confidence ?? explainability.confidence ?? 0))}
+      ${renderNutritionMetric('Estimate', `${formatNumber(result.caffeine)}mg caffeine / ${formatNumber(result.sugarContent)}g sugar`)}
+    </div>
+
+    <div class="nutrition-explain-section">
+      <div class="nutrition-explain-title">Knowledge match</div>
+      <div class="explain-chips">
+        <span class="explain-chip">used: ${usedKnowledge ? 'yes' : 'no'}</span>
+        ${matchedId ? `<span class="explain-chip">id: ${escapeHtml(matchedId)}</span>` : ''}
+        ${retrievalScore !== null && retrievalScore !== undefined ? `<span class="explain-chip">score: ${escapeHtml(Number(retrievalScore).toFixed(3))}</span>` : ''}
+      </div>
+    </div>
+
+    <div class="nutrition-explain-section">
+      <div class="nutrition-explain-title">Composition</div>
+      ${usedComposition
+        ? renderComponentsTable(components)
+        : '<div class="nutrition-empty-note">Not used; exact knowledge match was available.</div>'}
+    </div>
+
+    ${renderTextList('Reasoning', reasoning)}
+    ${renderTextList('Assumptions', assumptions)}
+    ${renderTextList('Warnings', warnings, 'warning')}
+  `;
+}
+
+function renderNutritionMetric(label, value) {
+  return `
+    <div class="nutrition-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function renderComponentsTable(components) {
+  if (!components || components.length === 0) {
+    return '<div class="nutrition-empty-note">No components returned.</div>';
+  }
+  return `
+    <div class="nutrition-component-list">
+      ${components.map(component => `
+        <div class="nutrition-component-row">
+          <div>
+            <strong>${escapeHtml(component.name || 'component')}</strong>
+            <span>${escapeHtml(component.category || 'unknown')}</span>
+          </div>
+          <div>${escapeHtml(formatAmount(component.amount, component.unit))}</div>
+          <div>${formatNumber(component.caffeine_mg)}mg</div>
+          <div>${formatNumber(component.sugar_g)}g</div>
+          <div>${formatConfidence(component.confidence ?? 0)}</div>
+          <small>${escapeHtml(component.basis || '')}</small>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderTextList(title, items, tone = '') {
+  const list = normalizeTextList(items);
+  if (list.length === 0) return '';
+  return `
+    <div class="nutrition-explain-section ${tone ? `tone-${tone}` : ''}">
+      <div class="nutrition-explain-title">${escapeHtml(title)}</div>
+      <ul class="nutrition-text-list">
+        ${list.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+      </ul>
+    </div>
+  `;
+}
+
+function normalizeTextList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(item => typeof item === 'string' ? item : JSON.stringify(item));
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map(item => String(item)) : [String(parsed)];
+    } catch (e) {
+      return [value];
+    }
+  }
+  return [String(value)];
+}
+
+function formatAmount(amount, unit) {
+  const numeric = Number(amount ?? 0);
+  return `${Number.isFinite(numeric) ? numeric.toFixed(numeric % 1 === 0 ? 0 : 1) : amount} ${unit || ''}`.trim();
+}
+
+function formatNumber(value) {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric.toFixed(1) : '0.0';
 }
 
 // Helper to auto-fill the log form
@@ -1130,6 +1256,8 @@ async function triggerAgentAnalysis(logData) {
   try {
     const data = await api.logDrinkApi(logData);
     if (data.status === 'success') {
+      state.lastNutritionResult = data.nutrition_result || null;
+      renderNutritionExplainabilityPanel();
       updateAgentUI(data.agent_analysis);
       
       // 同步后端最新的数据（因为 Agent 可能会修改数值）

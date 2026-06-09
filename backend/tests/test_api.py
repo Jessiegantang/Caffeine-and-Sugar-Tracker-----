@@ -97,6 +97,12 @@ class ApiTests(unittest.TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
+        nutrition = response.json()["nutrition_result"]
+        self.assertEqual(nutrition["estimation_method"], "COMPOSITION_ESTIMATION")
+        self.assertIn("explainability", nutrition)
+        self.assertTrue(nutrition["explainability"]["used_composition"])
+        self.assertTrue(nutrition["explainability"]["components"])
+
         db = SessionLocal()
         try:
             log = db.query(DrinkLog).filter(DrinkLog.id == "test_api_composition_log").first()

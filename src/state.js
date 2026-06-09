@@ -4,7 +4,8 @@ export const state = {
   selectedDate: '', // Date currently selected for daily dashboard (YYYY-MM-DD)
   activeTab: 'tab-daily', // 'tab-daily' or 'tab-weekly'
   calendarMonth: '', // YYYY-MM
-  currentDrinkFromDatabase: null // Stores the reference to a db drink if selected
+  currentDrinkFromDatabase: null, // Stores the reference to a db drink if selected
+  lastNutritionResult: null
 };
 
 export function getElementByIdSafe(id, defaultValue = null) {
@@ -79,5 +80,6 @@ export const elements = {
   importFile: document.getElementById('import-file'),
   importFilename: document.getElementById('import-filename'),
   importExecuteBtn: document.getElementById('import-execute-btn'),
-  importResult: document.getElementById('import-result')
+  importResult: document.getElementById('import-result'),
+  nutritionExplainabilityPanel: getElementByIdSafe('nutrition-explainability-panel')
 };
