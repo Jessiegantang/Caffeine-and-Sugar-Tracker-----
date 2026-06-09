@@ -237,7 +237,8 @@ class NutritionAgentTests(unittest.TestCase):
 
             self.assertEqual(result["estimation_method"], "SQL_EXACT_MATCH")
             self.assertEqual(result["matched_knowledge_id"], kb_id)
-            self.assertNotIn("composition", result)
+            self.assertIsNone(result["composition"])
+            self.assertTrue(result["explainability"]["used_knowledge_match"])
         finally:
             row = db.query(DrinkKnowledge).filter(DrinkKnowledge.id == kb_id).first()
             if row:

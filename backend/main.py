@@ -7,8 +7,9 @@ from pydantic import BaseModel
 import datetime
 
 from database import engine, get_db, Base, DrinkLog, SleepRecord, DrinkKnowledge, HealthPlan, ChatLog, AgentTrace, ProductCandidate, NutritionEvidence, init_db
-from agent import enrich_drink_data, generate_health_report, generate_companion_response, parse_intake_message
+from agent import generate_health_report, generate_companion_response, parse_intake_message
 from agents.orchestrator import run_agent_orchestrator
+from agents.nutrition_pipeline import estimate_drink_nutrition
 from agents.memory_agent import apply_memory_updates, clear_user_memory, extract_memory_updates, read_user_memory
 from agents.health_plan_agent import create_health_plan, get_active_plan, plan_progress_summary, serialize_plan, update_plan_progress
 from agents.knowledge_acquisition_agent import (
@@ -64,6 +65,14 @@ def parse_json_list(value: str | None) -> list:
         return parsed if isinstance(parsed, list) else []
     except Exception:
         return []
+
+
+def drink_log_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    allowed_columns = {column.name for column in DrinkLog.__table__.columns}
+    payload = {key: value for key, value in data.items() if key in allowed_columns}
+    if isinstance(payload.get("reasoning"), (list, dict)):
+        payload["reasoning"] = json.dumps(payload["reasoning"], ensure_ascii=False)
+    return payload
 
 # Pydantic models for incoming data
 class DrinkInput(BaseModel):
@@ -133,26 +142,20 @@ def log_drink(drink: DrinkInput, db: Session = Depends(get_db)):
     drink_dict = drink.dict()
     drink_dict["data_source"] = "用户录入"
     
-    # 2. Enrich data synchronously (DB Exact Match -> RAG -> Estimator)
-    enriched_drink = enrich_drink_data(drink_dict, db)
+    # 2. Estimate data synchronously through the stable nutrition contract.
+    enriched_drink = estimate_drink_nutrition(drink_dict, db)
+    db_payload = drink_log_payload(enriched_drink)
     
     # 3. Save to DB
     db_log = db.query(DrinkLog).filter(DrinkLog.id == drink.id).first()
     if not db_log:
-        db_log = DrinkLog(**enriched_drink)
-        if "reasoning" in enriched_drink and isinstance(enriched_drink["reasoning"], list):
-            import json
-            db_log.reasoning = json.dumps(enriched_drink["reasoning"])
+        db_log = DrinkLog(**db_payload)
         db.add(db_log)
         db.commit()
     else:
         # Update existing
-        for k, v in enriched_drink.items():
-            if k == "reasoning" and isinstance(v, list):
-                import json
-                setattr(db_log, k, json.dumps(v))
-            elif hasattr(db_log, k):
-                setattr(db_log, k, v)
+        for k, v in db_payload.items():
+            setattr(db_log, k, v)
         db.commit()
         
     insights = get_daily_insights(drink.date, db)

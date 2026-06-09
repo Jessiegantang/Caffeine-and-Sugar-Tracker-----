@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from fastapi.testclient import TestClient
 
 import main
-from database import HealthPlan, SessionLocal
+from database import DrinkLog, HealthPlan, SessionLocal
 
 
 class ApiTests(unittest.TestCase):
@@ -18,6 +18,8 @@ class ApiTests(unittest.TestCase):
     def tearDown(self):
         db = SessionLocal()
         try:
+            for log in db.query(DrinkLog).filter(DrinkLog.id == "test_api_composition_log").all():
+                db.delete(log)
             for plan in db.query(HealthPlan).filter(HealthPlan.id.like("plan_%")).all():
                 if plan.target in {"reduce_sugar", "reduce_caffeine", "work_week_strategy", "balanced_drink_routine"}:
                     db.delete(plan)
@@ -76,6 +78,36 @@ class ApiTests(unittest.TestCase):
 
         progress = self.client.post("/api/health/plans/active/progress?date=2026-06-06").json()["plan"]
         self.assertEqual(progress["current_day"], 3)
+
+    def test_log_drink_api_uses_composition_without_persisting_extra_fields(self):
+        response = self.client.post("/api/log_drink", json={
+            "id": "test_api_composition_log",
+            "date": "2026-06-04",
+            "brand": "NoKbApiBrand",
+            "name": "coconut latte",
+            "type": "coffee",
+            "sugar": "three",
+            "volume": 500,
+            "startTime": "10:00",
+            "endTime": "10:15",
+            "caffeine": 0,
+            "sugarContent": 0,
+            "alcoholContent": 0,
+            "abv": 0,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        db = SessionLocal()
+        try:
+            log = db.query(DrinkLog).filter(DrinkLog.id == "test_api_composition_log").first()
+            self.assertIsNotNone(log)
+            self.assertEqual(log.estimation_method, "COMPOSITION_ESTIMATION")
+            self.assertGreater(log.caffeine, 0)
+            self.assertGreater(log.sugarContent, 0)
+            self.assertFalse(hasattr(log, "composition"))
+            self.assertFalse(hasattr(log, "explainability"))
+        finally:
+            db.close()
 
 
 if __name__ == "__main__":
