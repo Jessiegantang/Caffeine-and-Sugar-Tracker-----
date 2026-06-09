@@ -30,11 +30,11 @@ SWEETNESS_MULTIPLIERS = {
 }
 
 SUGAR_ALIASES = {
-    "none": ["none", "no", "zero", "sugar-free", "sugar free", "unsweetened", "0", "0%", "无糖", "不加糖", "零糖"],
-    "three": ["three", "3", "30%", "三分糖", "3分糖", "少糖"],
-    "half": ["half", "50%", "半糖", "五分糖", "5分糖"],
-    "seven": ["seven", "70%", "七分糖", "7分糖"],
-    "full": ["full", "100%", "regular", "normal", "全糖", "正常糖", "满糖"],
+    "none": ["none", "no", "zero", "sugar-free", "sugar free", "unsweetened", "0", "0%", "wu tang", "no sugar"],
+    "three": ["three", "3", "30%", "san fen", "san fen tang", "less sugar"],
+    "half": ["half", "50%", "ban tang", "wu fen", "wu fen tang"],
+    "seven": ["seven", "70%", "qi fen", "qi fen tang"],
+    "full": ["full", "100%", "regular", "normal", "quan tang", "full sugar"],
 }
 
 
@@ -296,17 +296,17 @@ def estimate_composition_nutrition(drink: dict) -> dict:
 
 
 def _infer_drink_type(text: str, raw_type: str) -> str:
-    if any(token in text for token in ["生椰", "coconut latte", "coconut milk latte", "coconut"]):
+    if any(token in text for token in ["sheng ye", "raw coconut", "coconut latte", "coconut milk latte", "coconut"]):
         return "coconut_latte"
-    if any(token in text for token in ["燕麦", "oat latte", "oatmilk", "oat milk"]):
+    if any(token in text for token in ["yan mai", "oat latte", "oatmilk", "oat milk"]):
         return "oat_latte"
-    if any(token in text for token in ["美式", "americano", "cold brew", "coldbrew"]):
+    if any(token in text for token in ["mei shi", "americano", "cold brew", "coldbrew"]):
         return "americano"
-    if any(token in text for token in ["拿铁", "latte"]):
+    if any(token in text for token in ["na tie", "latte"]):
         return "latte"
-    if raw_type in {"milktea", "milk_tea"} or any(token in text for token in ["奶茶", "milk tea"]):
+    if raw_type in {"milktea", "milk_tea"} or any(token in text for token in ["nai cha", "milk tea"]):
         return "milk_tea"
-    if raw_type == "fruittea" or any(token in text for token in ["水果茶", "果茶", "柠檬茶", "fruit tea", "juice tea"]):
+    if raw_type == "fruittea" or any(token in text for token in ["shui guo cha", "guo cha", "ning meng cha", "fruit tea", "juice tea"]):
         return "fruit_tea"
     if raw_type == "coffee":
         return "americano" if "coffee" in text else "latte"

@@ -6,6 +6,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from agent import enrich_drink_data
 from agents.health_plan_agent import build_plan_days, infer_plan_target
+from agents.nutrition_agent import estimate_from_parsed_drink
+from agents.orchestrator import run_agent_orchestrator
 from database import DrinkKnowledge, SessionLocal
 from local_estimator import estimate_nutrition
 
@@ -181,6 +183,82 @@ class NutritionAgentTests(unittest.TestCase):
                 db.delete(row)
                 db.commit()
             db.close()
+
+    def test_nutrition_agent_uses_composition_when_no_knowledge_match(self):
+        db = SessionLocal()
+        try:
+            result = estimate_from_parsed_drink({
+                "brand": "NoKbBrand",
+                "name": "coconut latte",
+                "type": "coffee",
+                "sugar": "three",
+                "volume": 500,
+                "confidence": 0.9,
+            }, "2026-06-04", db)
+        finally:
+            db.close()
+
+        self.assertEqual(result["estimation_method"], "COMPOSITION_ESTIMATION")
+        self.assertEqual(result["data_source"], "Composition Estimation Agent")
+        self.assertIn("composition", result)
+        self.assertTrue(result["composition"]["components"])
+        self.assertTrue(result["reasoning"])
+
+    def test_nutrition_agent_keeps_sql_exact_match(self):
+        db = SessionLocal()
+        kb_id = "test_nutrition_agent_exact_kb"
+        try:
+            existing = db.query(DrinkKnowledge).filter(DrinkKnowledge.id == kb_id).first()
+            if existing:
+                db.delete(existing)
+                db.commit()
+
+            db.add(DrinkKnowledge(
+                id=kb_id,
+                brand="ExactCompositionBrand",
+                name="Exact Composition Latte",
+                type="coffee",
+                volume=500,
+                caffeine=123,
+                baseSugar=22,
+                source="test_fixture",
+                confidence=0.98,
+            ))
+            db.commit()
+
+            result = estimate_from_parsed_drink({
+                "brand": "ExactCompositionBrand",
+                "name": "Exact Composition Latte",
+                "type": "coffee",
+                "sugar": "half",
+                "volume": 500,
+                "confidence": 0.9,
+            }, "2026-06-04", db)
+
+            self.assertEqual(result["estimation_method"], "SQL_EXACT_MATCH")
+            self.assertEqual(result["matched_knowledge_id"], kb_id)
+            self.assertNotIn("composition", result)
+        finally:
+            row = db.query(DrinkKnowledge).filter(DrinkKnowledge.id == kb_id).first()
+            if row:
+                db.delete(row)
+                db.commit()
+            db.close()
+
+    def test_orchestrator_tools_used_contains_composition_estimation(self):
+        db = SessionLocal()
+        try:
+            state = run_agent_orchestrator(
+                "我刚喝了一杯coconut-latte，大杯，三分糖。",
+                "2026-06-04",
+                db,
+            )
+        finally:
+            db.close()
+
+        self.assertEqual(state["final_action"], "fill_log_form")
+        self.assertEqual(state["nutrition_result"]["estimation_method"], "COMPOSITION_ESTIMATION")
+        self.assertIn("COMPOSITION_ESTIMATION", state["tools_used"])
 
     def test_health_plan_is_structured_for_seven_days(self):
         target = infer_plan_target("我想一周内减少奶茶糖分")

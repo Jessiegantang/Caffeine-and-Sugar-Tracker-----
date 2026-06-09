@@ -15,7 +15,7 @@ class CompositionAgentTests(unittest.TestCase):
     def test_large_coconut_latte_estimates_espresso_and_coconut_milk(self):
         result = estimate_composition_nutrition({
             "brand": "Luckin",
-            "name": "生椰拿铁",
+            "name": "sheng ye coconut latte",
             "type": "coffee",
             "volume": 500,
             "sugar": "three",
