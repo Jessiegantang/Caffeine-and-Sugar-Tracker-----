@@ -38,8 +38,10 @@ else:
     llm = ChatOpenAI(model=model_name, api_key=api_key)
     embeddings = OpenAIEmbeddings(model="text-embedding-v3", api_key=api_key, check_embedding_ctx_length=False)
 
-chroma_path = os.path.join(os.path.dirname(__file__), "chroma_db")
-if os.path.exists(chroma_path):
+default_chroma_path = os.path.join(os.path.dirname(__file__), "chroma_db")
+chroma_path = os.getenv("CHROMA_PERSIST_DIR", default_chroma_path)
+use_chroma = os.getenv("CHROMA_PERSIST_DIR") is not None or not _env_truthy("DRINKMIND_OFFLINE")
+if use_chroma and os.path.exists(chroma_path):
     vectorstore = Chroma(persist_directory=chroma_path, embedding_function=embeddings)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
 else:
