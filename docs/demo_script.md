@@ -60,13 +60,48 @@ Show:
 - Whether a knowledge match was used.
 - Components such as espresso, coconut milk/base, syrup, assumptions, and
   warnings when Composition Estimation is used.
+- `explainability.graph_trace`, which shows the LangGraph nodes executed.
+- `explainability.verification`, which shows non-mutating verification warnings
+  and issues for the estimate.
 
 Explain the key point:
 
 ```text
-DrinkMind does not only output final caffeine/sugar numbers. It stores the
+DrinkMind now runs nutrition estimation through a LangGraph StateGraph. It does
+not only output final caffeine/sugar numbers; it stores the workflow trace and
 reasoning shape needed to replay and inspect the estimate later.
 ```
+
+The graph nodes are:
+
+```text
+normalize_input
+lookup_knowledge
+route_estimation
+use_knowledge_result
+composition_decompose
+composition_estimate
+verify_result
+build_explainability
+```
+
+For a knowledge-backed estimate, the path is:
+
+```text
+normalize_input -> lookup_knowledge -> route_estimation ->
+use_knowledge_result -> verify_result -> build_explainability
+```
+
+For a Composition Estimation fallback, the path is:
+
+```text
+normalize_input -> lookup_knowledge -> route_estimation ->
+composition_decompose -> composition_estimate -> verify_result ->
+build_explainability
+```
+
+`lookup_knowledge` currently reuses `enrich_drink_data`, so SQL/RAG lookup
+behavior is preserved rather than fully split out of `backend/agent.py`.
 
 ## 4. Replay Saved Explainability From A Historical Log
 
@@ -159,6 +194,9 @@ Expected result:
 - Composition Estimation is skipped because reviewed product knowledge has
   higher priority.
 - The explainability panel should show the matched knowledge ID.
+- `explainability.graph_trace` should show the knowledge path:
+  `normalize_input -> lookup_knowledge -> route_estimation ->
+  use_knowledge_result -> verify_result -> build_explainability`.
 
 This closes the loop:
 

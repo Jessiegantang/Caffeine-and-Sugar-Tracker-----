@@ -27,11 +27,12 @@ flowchart LR
     ManualLog --> Pipeline["estimate_drink_nutrition<br/>backend/agents/nutrition_pipeline.py"]
     NutritionAgent --> Pipeline
 
-    Pipeline --> Enrichment["enrich_drink_data<br/>SQL/RAG enrichment"]
+    Pipeline --> Graph["LangGraph Nutrition StateGraph"]
+    Graph --> Enrichment["lookup_knowledge<br/>enrich_drink_data reuse"]
     Enrichment --> SQL["SQLite DrinkKnowledge<br/>exact/alias/product match"]
     Enrichment --> RAG["ChromaDB RAG<br/>knowledge retrieval"]
-    Pipeline --> Composition["Composition Estimation Agent<br/>deterministic fallback"]
-    Pipeline --> Result["Stable nutrition result<br/>totals + reasoning + explainability"]
+    Graph --> Composition["Composition Estimation Agent<br/>decompose + estimate nodes"]
+    Graph --> Result["Stable nutrition result<br/>totals + reasoning + explainability"]
 
     ManualLog --> PersistLog["Persist DrinkLog<br/>composition_json + explainability_json"]
     Result --> PersistLog
@@ -58,9 +59,44 @@ flowchart LR
 The shared entry point is `estimate_drink_nutrition(drink, db)` in
 `backend/agents/nutrition_pipeline.py`.
 
-It first calls the existing enrichment path, then decides whether to keep a
-trusted knowledge result or replace weak fallback estimates with deterministic
-Composition Estimation.
+Nutrition estimation is implemented as an explicit LangGraph `StateGraph`. The
+external contract remains `estimate_drink_nutrition(drink, db)`, so manual
+logging and agent-assisted logging both enter the same workflow without calling
+separate nutrition implementations.
+
+Graph nodes:
+
+- `normalize_input`
+- `lookup_knowledge`
+- `route_estimation`
+- `use_knowledge_result`
+- `composition_decompose`
+- `composition_estimate`
+- `verify_result`
+- `build_explainability`
+
+`lookup_knowledge` currently reuses the existing `enrich_drink_data` function.
+This preserves the current SQL/RAG behavior; SQL/RAG internals have not been
+fully split out of `backend/agent.py`.
+
+Knowledge path:
+
+```text
+normalize_input -> lookup_knowledge -> route_estimation ->
+use_knowledge_result -> verify_result -> build_explainability
+```
+
+Composition path:
+
+```text
+normalize_input -> lookup_knowledge -> route_estimation ->
+composition_decompose -> composition_estimate -> verify_result ->
+build_explainability
+```
+
+The graph first calls the existing enrichment path, then decides whether to
+keep a trusted knowledge result or replace weak fallback estimates with
+deterministic Composition Estimation.
 
 Current priority:
 
@@ -79,6 +115,12 @@ The Composition Estimation Agent is deterministic. It estimates drink
 components such as espresso, milk base, tea base, fruit base, and syrup, then
 builds component-level reasoning and warnings.
 
+For debugging and demos, explainability now also includes:
+
+- `explainability.graph_trace`: the executed LangGraph node sequence.
+- `explainability.verification`: non-mutating verification status, warnings,
+  and issues produced by `verify_result`.
+
 ## 3. Manual Logging Path
 
 `POST /api/log_drink` is the path that persists a consumed drink.
@@ -95,18 +137,24 @@ sequenceDiagram
 
     FE->>API: POST /api/log_drink
     API->>NP: estimate_drink_nutrition(drink, db)
-    NP->>SQL: Try exact/alias knowledge match
+    NP->>NP: normalize_input
+    NP->>SQL: lookup_knowledge via enrich_drink_data
     alt Trusted SQL match
         SQL-->>NP: SQL_EXACT_MATCH result
+        NP->>NP: use_knowledge_result
     else No SQL match
-        NP->>RAG: Try accepted knowledge retrieval
+        NP->>RAG: lookup_knowledge tries accepted retrieval
         alt Accepted RAG match
             RAG-->>NP: RAG_MATCH result
+            NP->>NP: use_knowledge_result
         else Weak or missing knowledge
-            NP->>CA: Estimate composition
+            NP->>CA: composition_decompose
+            NP->>CA: composition_estimate
             CA-->>NP: COMPOSITION_ESTIMATION result
         end
     end
+    NP->>NP: verify_result
+    NP->>NP: build_explainability
     NP-->>API: Stable nutrition result
     API->>DB: Save DrinkLog with composition_json/explainability_json
     API-->>FE: Result and daily insight payload
@@ -117,7 +165,8 @@ Persistence details:
 - `composition_json` stores structured component estimates when Composition
   Estimation is used.
 - `explainability_json` stores method, knowledge-match state, confidence,
-  reasoning, assumptions, warnings, and feedback metadata when present.
+  reasoning, assumptions, warnings, `graph_trace`, `verification`, and feedback
+  metadata when present.
 - `GET /api/logs` deserializes those JSON fields so the frontend can replay
   saved explainability from historical logs.
 
@@ -251,11 +300,15 @@ features, but they are separate from the nutrition persistence path.
 ## 10. Demo Talking Points
 
 1. Manual logging persists explainability; agent logging prepares a draft.
-2. SQL/RAG knowledge has priority over Composition Estimation.
-3. Composition Estimation provides structured fallback reasoning instead of a
+2. Both paths enter the LangGraph Nutrition StateGraph through
+   `estimate_drink_nutrition(drink, db)`.
+3. SQL/RAG knowledge has priority over Composition Estimation.
+4. Composition Estimation provides structured fallback reasoning instead of a
    black-box final number.
-4. Saved explainability can be replayed from history.
-5. Feedback fixes one log immediately but only becomes reusable knowledge after
+5. `explainability.graph_trace` and `explainability.verification` make the
+   workflow easy to inspect in demos.
+6. Saved explainability can be replayed from history.
+7. Feedback fixes one log immediately but only becomes reusable knowledge after
    review.
-6. The quality gate keeps backend behavior, composition eval, and frontend build
+8. The quality gate keeps backend behavior, composition eval, and frontend build
    aligned.

@@ -8,11 +8,13 @@ explainability, and a human feedback review loop.
 ## Key Features
 
 - Natural-language drink parsing for common drink logging messages.
-- Unified nutrition pipeline used by manual logging and agent-assisted logging.
+- LangGraph StateGraph nutrition workflow used by manual logging and
+  agent-assisted logging.
 - SQL and RAG knowledge priority for reviewed product nutrition data.
 - Composition Estimation fallback for drinks without a trusted exact match.
 - Explainability persistence and replay through `composition_json` and
-  `explainability_json` on `DrinkLog`.
+  `explainability_json` on `DrinkLog`, including `graph_trace` and
+  `verification` debugging metadata.
 - Human Feedback Loop for correcting one estimate and optionally submitting it
   as reviewable evidence.
 - Knowledge Acquisition review flow from `ProductCandidate` and
@@ -115,6 +117,44 @@ venv\Scripts\python.exe tests\run_composition_eval_report.py
 The eval suite checks deterministic composition behavior, SQL knowledge
 priority, result shape, confidence ranges, and explainability payloads.
 
+## Nutrition Workflow
+
+Nutrition estimation is now an explicit LangGraph `StateGraph` inside
+`backend/agents/nutrition_pipeline.py`. The public contract remains
+`estimate_drink_nutrition(drink, db)`, and both `/api/log_drink` and
+`/api/agent/act` enter the same workflow through that function.
+
+Graph nodes:
+
+- `normalize_input`
+- `lookup_knowledge`
+- `route_estimation`
+- `use_knowledge_result`
+- `composition_decompose`
+- `composition_estimate`
+- `verify_result`
+- `build_explainability`
+
+Knowledge path:
+
+```text
+normalize_input -> lookup_knowledge -> route_estimation ->
+use_knowledge_result -> verify_result -> build_explainability
+```
+
+Composition path:
+
+```text
+normalize_input -> lookup_knowledge -> route_estimation ->
+composition_decompose -> composition_estimate -> verify_result ->
+build_explainability
+```
+
+`lookup_knowledge` currently reuses `enrich_drink_data`; SQL/RAG internals have
+not been fully split out of `backend/agent.py`. For demos and debugging, the
+result explainability includes `explainability.graph_trace` and
+`explainability.verification`.
+
 ## Demo Flow
 
 See `docs/demo_script.md` for a complete executable demo:
@@ -138,7 +178,7 @@ backend/
   database.py                     SQLAlchemy models and lightweight migrations
   agents/
     composition_agent.py          Deterministic component-based estimator
-    nutrition_pipeline.py         Stable nutrition estimation contract
+    nutrition_pipeline.py         LangGraph nutrition workflow and stable contract
     nutrition_agent.py            Orchestrator-facing nutrition boundary
     orchestrator.py               LangGraph agent routing
     knowledge_acquisition_agent.py Candidate/evidence review helpers

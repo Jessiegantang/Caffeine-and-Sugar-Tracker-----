@@ -408,6 +408,8 @@ function renderNutritionExplainabilityPanel() {
   const retrievalScore = explainability.retrieval_score ?? result.retrieval_score;
   const matchedId = explainability.matched_knowledge_id ?? result.matched_knowledge_id;
   const feedback = explainability.feedback || result.feedback || null;
+  const graphTrace = Array.isArray(explainability.graph_trace) ? explainability.graph_trace : [];
+  const verification = explainability.verification || null;
 
   panel.className = 'agent-panel-body nutrition-explainability-body';
   panel.innerHTML = `
@@ -427,6 +429,8 @@ function renderNutritionExplainabilityPanel() {
       </div>
     </div>
 
+    ${renderLangGraphWorkflow(graphTrace, verification)}
+
     <div class="nutrition-explain-section">
       <div class="nutrition-explain-title">Composition</div>
       ${usedComposition
@@ -439,6 +443,57 @@ function renderNutritionExplainabilityPanel() {
     ${renderTextList('Warnings', warnings, 'warning')}
     ${renderFeedbackMetadata(feedback, result.feedback_notice)}
     ${renderNutritionFeedbackForm(result)}
+  `;
+}
+
+function renderLangGraphWorkflow(graphTrace, verification) {
+  if (!graphTrace || graphTrace.length === 0) {
+    return '';
+  }
+
+  const warnings = normalizeTextList(verification?.warnings || []);
+  const issues = normalizeTextList(verification?.issues || []);
+  const passed = verification?.passed;
+
+  return `
+    <div class="nutrition-explain-section langgraph-workflow-section">
+      <div class="nutrition-explain-title">LangGraph 工作流</div>
+      <ol class="langgraph-step-list">
+        ${graphTrace.map((step, index) => `
+          <li class="langgraph-step">
+            <span class="langgraph-step-index">${index + 1}</span>
+            <span class="langgraph-step-name">${escapeHtml(step)}</span>
+          </li>
+        `).join('')}
+      </ol>
+      ${verification ? `
+        <div class="langgraph-verification">
+          <div class="explain-chips">
+            <span class="explain-chip">验证通过：${formatVerificationPassed(passed)}</span>
+          </div>
+          ${warnings.length ? renderInlineTextList('警告', warnings, 'warning') : ''}
+          ${issues.length ? renderInlineTextList('问题', issues, 'issue') : ''}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function formatVerificationPassed(value) {
+  if (value === undefined || value === null) return '未知';
+  return value ? '是' : '否';
+}
+
+function renderInlineTextList(label, items, tone = '') {
+  const values = normalizeTextList(items);
+  if (values.length === 0) return '';
+  return `
+    <div class="langgraph-verification-list ${tone ? `tone-${tone}` : ''}">
+      <span>${escapeHtml(label)}</span>
+      <ul>
+        ${values.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+      </ul>
+    </div>
   `;
 }
 

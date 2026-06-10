@@ -1040,6 +1040,89 @@ header {
   margin-bottom: 0.45rem;
 }
 
+.langgraph-workflow-section {
+  background: rgba(35, 106, 98, 0.06);
+  border-color: rgba(35, 106, 98, 0.18);
+}
+
+.langgraph-step-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.langgraph-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.32rem 0.45rem;
+  border-radius: 0.4rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.langgraph-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(35, 106, 98, 0.12);
+  color: #236a62;
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
+.langgraph-step-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.langgraph-verification {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.langgraph-verification-list {
+  margin-top: 0.45rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.langgraph-verification-list span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.langgraph-verification-list ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.langgraph-verification-list li + li {
+  margin-top: 0.2rem;
+}
+
+.langgraph-verification-list.tone-warning {
+  color: #b45309;
+}
+
+.langgraph-verification-list.tone-issue {
+  color: #dc2626;
+}
+
 .nutrition-empty-note {
   color: var(--text-muted);
   font-size: 0.8rem;
