@@ -4,39 +4,27 @@ import re
 import uuid
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_chroma import Chroma
-from dotenv import load_dotenv
 
 from database import SessionLocal, DrinkLog, DrinkKnowledge
 from local_estimator import estimate_nutrition
-
-load_dotenv()
-
-base_url = os.getenv("BASE_URL")
-api_key = os.getenv("OPENAI_API_KEY", "dummy_key_if_none")
-model_name = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
-
-
-def _env_truthy(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"true", "1", "yes"}
+from agents.companion_agent import generate_companion_response
+from agents.intake_parser import IntakeParseResult, parse_intake_message
+from agents.report_agent import generate_health_report
+from agents.llm_config import (
+    api_key,
+    base_url,
+    embeddings,
+    env_truthy as _env_truthy,
+    llm,
+    llm_enabled,
+    model_name,
+)
 
 
 def _llm_enabled() -> bool:
-    if _env_truthy("DRINKMIND_OFFLINE"):
-        return False
-    current_api_key = os.getenv("OPENAI_API_KEY", "")
-    if not current_api_key or current_api_key.startswith("dummy_"):
-        return False
-    return _env_truthy("ENABLE_LLM")
-
-if base_url:
-    llm = ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
-    embeddings = OpenAIEmbeddings(model="text-embedding-v3", api_key=api_key, base_url=base_url, check_embedding_ctx_length=False)
-else:
-    llm = ChatOpenAI(model=model_name, api_key=api_key)
-    embeddings = OpenAIEmbeddings(model="text-embedding-v3", api_key=api_key, check_embedding_ctx_length=False)
+    return llm_enabled()
 
 default_chroma_path = os.path.join(os.path.dirname(__file__), "chroma_db")
 chroma_path = os.getenv("CHROMA_PERSIST_DIR", default_chroma_path)
@@ -78,32 +66,6 @@ def delete_chroma_document(kb_id):
         pass
 
 
-class IntakeParseResult(BaseModel):
-    intent: str = Field(description="User intent, such as log_drink or ask_advice.")
-    brand: str | None = Field(default=None, description="Drink brand.")
-    name: str | None = Field(default=None, description="Drink name.")
-    type: str | None = Field(default=None, description="Drink type.")
-    volume: int | None = Field(default=None, description="Volume in ml.")
-    sugar: str | None = Field(default=None, description="Sugar level: none, three, half, seven, full, unknown.")
-    time: str | None = Field(default=None, description="Drink time, now or HH:MM.")
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    missing_fields: List[str] = Field(default_factory=list)
-    follow_up: str | None = Field(default=None, description="Question to ask when fields are missing.")
-
-
-SUGAR_ALIASES = [
-    ("none", ["无糖", "不加糖", "零糖", "0糖", "不另外加糖"]),
-    ("three", ["三分糖", "3分糖", "少糖"]),
-    ("half", ["半糖", "五分糖", "5分糖"]),
-    ("seven", ["七分糖", "7分糖"]),
-    ("full", ["全糖", "正常糖", "满糖"]),
-]
-
-KNOWN_BRANDS = [
-    "瑞幸咖啡", "瑞幸", "库迪咖啡", "库迪", "星巴克", "喜茶", "奈雪", "蜜雪冰城",
-    "霸王茶姬", "茶百道", "沪上阿姨", "古茗", "一点点", "可口可乐", "百事可乐"
-]
-
 BRAND_CANONICAL_KEYS = {
     "瑞幸咖啡": "luckin",
     "瑞幸": "luckin",
@@ -121,179 +83,6 @@ BRAND_CANONICAL_KEYS = {
     "奈雪的茶": "nayuki",
     "nayuki": "nayuki",
 }
-
-SIZE_ALIASES = [
-    (250, ["小杯", "小瓶"]),
-    (330, ["听装", "罐装", "一罐"]),
-    (350, ["中杯", "中瓶"]),
-    (500, ["大杯", "大瓶", "标准杯", "一杯"]),
-    (650, ["超大杯", "特大杯"]),
-]
-
-
-def _infer_intake_type(text: str, name: str | None) -> str:
-    source = f"{text} {name or ''}"
-    if any(word in source for word in ["奶茶", "拿铁", "生椰", "厚乳", "牛乳", "鲜奶"]):
-        return "milktea" if "咖啡" not in source and "拿铁" not in source else "coffee"
-    if any(word in source for word in ["咖啡", "拿铁", "美式", "摩卡", "冷萃", "espresso", "latte"]):
-        return "coffee"
-    if any(word in source for word in ["果茶", "柠檬茶", "水果茶", "杨枝甘露"]):
-        return "fruittea"
-    if any(word in source for word in ["茶", "乌龙", "绿茶", "红茶"]):
-        return "tea"
-    if any(word in source for word in ["可乐", "汽水", "苏打"]):
-        return "soda"
-    if any(word in source for word in ["啤酒", "鸡尾酒", "酒"]):
-        return "alcohol"
-    return "coffee"
-
-
-def _infer_volume(text: str) -> int | None:
-    match = re.search(r"(\d{2,4})\s*(?:ml|毫升|mL|ML)", text)
-    if match:
-        return int(match.group(1))
-    for volume, aliases in SIZE_ALIASES:
-        if any(alias in text for alias in aliases):
-            return volume
-    return None
-
-
-def _infer_sugar(text: str) -> str | None:
-    for value, aliases in SUGAR_ALIASES:
-        if any(alias in text for alias in aliases):
-            return value
-    return None
-
-
-def _infer_time(text: str) -> str:
-    match = re.search(r"(\d{1,2})[:：点](\d{1,2})?", text)
-    if match:
-        hour = int(match.group(1))
-        minute = int(match.group(2) or 0)
-        if 0 <= hour <= 23 and 0 <= minute <= 59:
-            return f"{hour:02d}:{minute:02d}"
-    if any(word in text for word in ["刚刚", "刚才", "现在", "刚喝", "刚买"]):
-        return "now"
-    if "下午" in text:
-        return "afternoon"
-    if "上午" in text:
-        return "morning"
-    if "晚上" in text:
-        return "evening"
-    return "now"
-
-
-def _infer_brand(text: str) -> str | None:
-    for brand in KNOWN_BRANDS:
-        if brand in text:
-            if brand == "瑞幸":
-                return "瑞幸咖啡"
-            if brand == "库迪":
-                return "库迪咖啡"
-            return brand
-    return None
-
-
-def _infer_name(text: str, brand: str | None) -> str | None:
-    cleaned = text
-    for token in ["我", "刚刚", "刚才", "刚", "喝了", "喝", "买了", "买", "一杯", "一瓶", "一罐", "了"]:
-        cleaned = cleaned.replace(token, " ")
-    if brand:
-        cleaned = cleaned.replace(brand, " ")
-        if brand == "瑞幸咖啡":
-            cleaned = cleaned.replace("瑞幸", " ")
-        if brand == "库迪咖啡":
-            cleaned = cleaned.replace("库迪", " ")
-    for _, aliases in SUGAR_ALIASES:
-        for alias in aliases:
-            cleaned = cleaned.replace(alias, " ")
-    for _, aliases in SIZE_ALIASES:
-        for alias in aliases:
-            cleaned = cleaned.replace(alias, " ")
-    cleaned = re.sub(r"\d{2,4}\s*(?:ml|毫升|mL|ML)", " ", cleaned)
-    parts = [p.strip(" ，,。.？?！!") for p in re.split(r"[,，。；;、\s]+", cleaned) if p.strip(" ，,。.？?！!")]
-    candidates = [p for p in parts if len(p) >= 2 and p not in ["今天", "下午", "上午", "晚上", "现在"]]
-    if not candidates:
-        return None
-    return max(candidates, key=len)
-
-
-def _build_missing_fields(result: dict) -> list[str]:
-    missing = []
-    for field_name in ["name", "volume", "sugar"]:
-        if result.get(field_name) in [None, "", "unknown"]:
-            missing.append(field_name)
-    return missing
-
-
-def _build_follow_up(missing_fields: list[str]) -> str | None:
-    if not missing_fields:
-        return None
-    if "volume" in missing_fields:
-        return "你喝的是中杯、大杯，还是可以告诉我大概多少 ml？"
-    if "sugar" in missing_fields:
-        return "这杯的甜度是无糖、三分糖、半糖、七分糖还是全糖？"
-    if "name" in missing_fields:
-        return "这杯饮品叫什么名字？"
-    return "我还需要一点信息才能帮你记录这杯饮品。"
-
-
-def _parse_intake_locally(user_message: str) -> dict:
-    text = user_message.strip()
-    log_keywords = ["喝", "买", "来一杯", "记录", "加一条", "点了", "刚刚", "刚才"]
-    intent = "log_drink" if any(keyword in text for keyword in log_keywords) else "ask_advice"
-    brand = _infer_brand(text)
-    name = _infer_name(text, brand) if intent == "log_drink" else None
-    result = {
-        "intent": intent,
-        "brand": brand,
-        "name": name,
-        "type": _infer_intake_type(text, name) if intent == "log_drink" else None,
-        "volume": _infer_volume(text) if intent == "log_drink" else None,
-        "sugar": _infer_sugar(text) if intent == "log_drink" else None,
-        "time": _infer_time(text) if intent == "log_drink" else None,
-        "confidence": 0.72 if intent == "log_drink" else 0.55,
-    }
-    result["missing_fields"] = _build_missing_fields(result) if intent == "log_drink" else []
-    result["follow_up"] = _build_follow_up(result["missing_fields"])
-    if result["missing_fields"]:
-        result["confidence"] = min(result["confidence"], 0.62)
-    return result
-
-
-def parse_intake_message(user_message: str) -> dict:
-    local_result = _parse_intake_locally(user_message)
-    if local_result["intent"] != "log_drink":
-        return local_result
-    if not local_result.get("missing_fields"):
-        return local_result
-    if not _llm_enabled():
-        return local_result
-
-    try:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system",
-             "You are DrinkMind Intake Parser. Extract a drink logging intent from Chinese natural language. "
-             "Return structured fields only. Do not invent unknown required fields. "
-             "Sugar must be one of none, three, half, seven, full, unknown. "
-             "Type must be one of coffee, milktea, tea, fruittea, soda, alcohol."),
-            ("user", "{message}")
-        ])
-        structured_llm = llm.with_structured_output(IntakeParseResult, method="function_calling")
-        parsed = (prompt | structured_llm).invoke({"message": user_message})
-        result = parsed.dict()
-        for key, value in local_result.items():
-            if result.get(key) in [None, "", "unknown"] and value not in [None, "", "unknown"]:
-                result[key] = value
-        result["intent"] = result.get("intent") or "log_drink"
-        result["missing_fields"] = _build_missing_fields(result)
-        result["follow_up"] = _build_follow_up(result["missing_fields"])
-        if result["missing_fields"]:
-            result["confidence"] = min(float(result.get("confidence") or 0.7), 0.68)
-        return result
-    except Exception as e:
-        print(f"[Intake Parser] Falling back to local parser: {e}", flush=True)
-        return local_result
 
 
 def _knowledge_scope(source: str | None) -> str:
@@ -674,80 +463,3 @@ def enrich_drink_data(r: dict, db) -> dict:
     r["retrieval_score"] = None
     
     return r
-
-
-class InsightItem(BaseModel):
-    level: str = Field(description="警告级别: info, warning, success, danger")
-    icon: str = Field(description="合适的 Emoji 图标")
-    title: str = Field(description="洞察标题，简短")
-    message: str = Field(description="有温度的伴侣提示文案")
-
-class ReportOutput(BaseModel):
-    insights: List[InsightItem] = Field(description="1到3条洞察列表")
-
-def generate_health_report(logs: list, report_type: str) -> dict:
-    if not logs:
-        return {"insights": []}
-    if not _llm_enabled():
-        return {"insights": []}
-        
-    system_prompt = f"""你是一个名为 DrinkMind Companion 的贴心饮品伴侣。你的目标是基于用户的饮品记录，提供有温度的【{report_type}】摄入分析。
-绝对不要像个死板的健身教练一样说教、命令或指责用户。
-保持语气轻松、自然、像个懂健康的好朋友。
-
-分析维度：
-- 咖啡因摄入量与饮用时间（下午过晚饮用可能会影响睡眠）
-- 糖分摄入总和（是否需要注意控糖）
-- 如果连续多天饮用咖啡，提醒一下可能产生耐受性，建议适当“咖啡因断食”。
-
-返回要求：
-- 请提取出 1 到 3 条核心洞察。
-- 每条洞察包含 level（如 info, warning, success, danger），title，message，icon。
-- 保证严格符合 JSON 结构。"""
-    
-    user_prompt = "这是近期的饮品记录：\n{logs_text}\n请生成洞察报告。"
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("user", user_prompt)
-    ])
-    
-    structured_llm = llm.with_structured_output(ReportOutput, method="function_calling")
-    chain = prompt | structured_llm
-    
-    result = chain.invoke({"logs_text": json.dumps(logs, ensure_ascii=False)})
-    return result.dict()
-
-
-def generate_companion_response(user_message: str, history: List[Dict[str, str]], context: Dict[str, Any]) -> str:
-    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-    
-    if not _llm_enabled():
-        return "LLM companion is disabled in the current environment."
-
-    try:
-        sys_prompt = (
-            "你是一个名叫 DrinkMind Companion 的 AI 饮品健康陪伴伴侣。\n"
-            "你不是一个严格监督的健康教练，而是一个懂饮品、懂健康、懂用户情绪的贴心朋友。\n"
-            "你的沟通风格：\n"
-            "- 语气轻松、像朋友一样自然对话，可以用一些 Emoji。\n"
-            "- 当用户想喝奶茶时，不要一味阻拦，可以幽默地建议换成三分糖，或者因为前几天控制得好给予肯定。\n"
-            "- 关注用户的疲劳状态和睡眠。如果昨天没睡好，温柔地建议喝一些舒缓的饮品而不是高咖啡因的猛药。\n"
-            "这是当前的用户偏好与数据上下文：\n"
-            f"{json.dumps(context, ensure_ascii=False)}\n"
-        )
-        
-        messages = [SystemMessage(content=sys_prompt)]
-        for msg in history:
-            if msg["role"] == "user":
-                messages.append(HumanMessage(content=msg["content"]))
-            else:
-                messages.append(AIMessage(content=msg["content"]))
-                
-        messages.append(HumanMessage(content=user_message))
-        
-        response = llm.invoke(messages)
-        return response.content
-    except Exception as e:
-        print(f"[Agent Error] Companion Chat failed: {e}")
-        return "抱歉，我的大脑好像有点短路了，请稍后再试！"
