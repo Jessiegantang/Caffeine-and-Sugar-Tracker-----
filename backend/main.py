@@ -7,9 +7,11 @@ from pydantic import BaseModel
 import datetime
 
 from database import engine, get_db, Base, DrinkLog, SleepRecord, DrinkKnowledge, HealthPlan, ChatLog, AgentTrace, ProductCandidate, NutritionEvidence, init_db
-from agent import generate_health_report, generate_companion_response, parse_intake_message
+from agents.companion_agent import generate_companion_response
+from agents.intake_parser import parse_intake_message
 from agents.orchestrator import run_agent_orchestrator
 from agents.nutrition_pipeline import estimate_drink_nutrition
+from agents.report_agent import generate_health_report
 from agents.memory_agent import apply_memory_updates, clear_user_memory, extract_memory_updates, read_user_memory
 from agents.health_plan_agent import create_health_plan, get_active_plan, plan_progress_summary, serialize_plan, update_plan_progress
 from agents.knowledge_acquisition_agent import (
@@ -455,7 +457,7 @@ class ImageImportInput(BaseModel):
 class BulkIdsInput(BaseModel):
     ids: List[str]
 
-from agent import sync_chroma_document, delete_chroma_document
+from agents.rag_store import sync_chroma_document, delete_chroma_document
 
 @app.get("/api/knowledge_base")
 def get_knowledge_base(db: Session = Depends(get_db)):

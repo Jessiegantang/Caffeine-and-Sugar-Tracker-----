@@ -6,8 +6,8 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from agent import generate_companion_response
 from database import ChatLog, DrinkLog, SleepRecord
+from .companion_agent import generate_companion_response
 from .health_plan_agent import build_plan_days, infer_plan_target
 from .intake_parser import parse_intake
 from .memory_agent import extract_memory_updates, read_user_memory

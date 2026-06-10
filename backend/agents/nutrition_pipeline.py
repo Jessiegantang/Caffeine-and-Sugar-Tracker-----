@@ -11,7 +11,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from agent import enrich_drink_data
+from .knowledge_lookup import enrich_drink_data
 from .composition_agent import decompose_drink, estimate_from_composition
 
 
