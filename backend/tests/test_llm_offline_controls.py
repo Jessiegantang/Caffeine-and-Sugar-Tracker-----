@@ -1,0 +1,141 @@
+import os
+import sys
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+import agent
+from agents.nutrition_pipeline import estimate_drink_nutrition
+from database import SessionLocal
+from langchain_core.runnables import RunnableLambda
+
+
+class RaisingLLM:
+    def with_structured_output(self, *args, **kwargs):
+        raise AssertionError("LLM should not be called when disabled")
+
+    def invoke(self, *args, **kwargs):
+        raise AssertionError("LLM should not be called when disabled")
+
+
+class FakeStructuredLLM:
+    def __init__(self):
+        self.called = False
+
+    def with_structured_output(self, *args, **kwargs):
+        self.called = True
+        return RunnableLambda(lambda _: agent.IntakeParseResult(
+            intent="log_drink",
+            brand="FakeBrand",
+            name="Fake Latte",
+            type="coffee",
+            volume=500,
+            sugar="half",
+            time="now",
+            confidence=0.91,
+            missing_fields=[],
+            follow_up=None,
+        ))
+
+
+def incomplete_local_parse():
+    return {
+        "intent": "log_drink",
+        "brand": "FakeBrand",
+        "name": "Fake Latte",
+        "type": "coffee",
+        "volume": 500,
+        "sugar": None,
+        "time": "now",
+        "confidence": 0.62,
+        "missing_fields": ["sugar"],
+        "follow_up": "Which sugar level?",
+    }
+
+
+class LLMOfflineControlTests(unittest.TestCase):
+    def test_parse_intake_does_not_call_structured_llm_when_disabled(self):
+        with patch.dict(os.environ, {
+            "ENABLE_LLM": "false",
+            "DRINKMIND_OFFLINE": "true",
+            "OPENAI_API_KEY": "real-looking-key",
+        }):
+            with patch.object(agent, "llm", RaisingLLM()):
+                with patch.object(agent, "_parse_intake_locally", return_value=incomplete_local_parse()):
+                    result = agent.parse_intake_message("fake drink")
+
+        self.assertEqual(result["missing_fields"], ["sugar"])
+        self.assertEqual(result["follow_up"], "Which sugar level?")
+
+    def test_enrich_no_knowledge_match_is_quiet_and_uses_local_fallback_when_disabled(self):
+        db = SessionLocal()
+        try:
+            with patch.dict(os.environ, {
+                "ENABLE_LLM": "false",
+                "DRINKMIND_OFFLINE": "true",
+                "OPENAI_API_KEY": "real-looking-key",
+            }):
+                with patch.object(agent, "llm", RaisingLLM()):
+                    with patch.object(agent, "vectorstore", None):
+                        with patch("builtins.print") as mocked_print:
+                            result = agent.enrich_drink_data({
+                                "brand": "NoKbOfflineBrand",
+                                "name": "Offline Test Latte",
+                                "type": "coffee",
+                                "sugar": "three",
+                                "volume": 500,
+                                "data_source": "user_input",
+                            }, db)
+        finally:
+            db.close()
+
+        self.assertEqual(result["estimation_method"], "LOCAL_ESTIMATOR")
+        self.assertGreaterEqual(result["caffeine"], 0)
+        printed = "\n".join(str(call.args[0]) for call in mocked_print.call_args_list if call.args)
+        self.assertNotIn("AI Estimation Error", printed)
+        self.assertNotIn("tool_choice", printed)
+
+    def test_nutrition_pipeline_still_uses_composition_when_llm_disabled(self):
+        db = SessionLocal()
+        try:
+            with patch.dict(os.environ, {
+                "ENABLE_LLM": "false",
+                "DRINKMIND_OFFLINE": "true",
+                "OPENAI_API_KEY": "real-looking-key",
+            }):
+                with patch.object(agent, "llm", RaisingLLM()):
+                    with patch.object(agent, "vectorstore", None):
+                        result = estimate_drink_nutrition({
+                            "brand": "NoKbCompositionOfflineBrand",
+                            "name": "coconut latte",
+                            "type": "coffee",
+                            "sugar": "three",
+                            "volume": 500,
+                            "data_source": "user_input",
+                        }, db)
+        finally:
+            db.close()
+
+        self.assertEqual(result["estimation_method"], "COMPOSITION_ESTIMATION")
+        self.assertTrue(result["explainability"]["used_composition"])
+        self.assertTrue(result["composition"]["components"])
+
+    def test_parse_intake_can_enter_llm_path_when_explicitly_enabled(self):
+        fake_llm = FakeStructuredLLM()
+        with patch.dict(os.environ, {
+            "ENABLE_LLM": "true",
+            "DRINKMIND_OFFLINE": "false",
+            "OPENAI_API_KEY": "real-looking-key",
+        }):
+            with patch.object(agent, "llm", fake_llm):
+                with patch.object(agent, "_parse_intake_locally", return_value=incomplete_local_parse()):
+                    result = agent.parse_intake_message("fake drink")
+
+        self.assertTrue(fake_llm.called)
+        self.assertEqual(result["sugar"], "half")
+        self.assertEqual(result["missing_fields"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

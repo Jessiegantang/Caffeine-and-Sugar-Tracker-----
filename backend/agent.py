@@ -18,6 +18,19 @@ base_url = os.getenv("BASE_URL")
 api_key = os.getenv("OPENAI_API_KEY", "dummy_key_if_none")
 model_name = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
 
+
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"true", "1", "yes"}
+
+
+def _llm_enabled() -> bool:
+    if _env_truthy("DRINKMIND_OFFLINE"):
+        return False
+    current_api_key = os.getenv("OPENAI_API_KEY", "")
+    if not current_api_key or current_api_key.startswith("dummy_"):
+        return False
+    return _env_truthy("ENABLE_LLM")
+
 if base_url:
     llm = ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     embeddings = OpenAIEmbeddings(model="text-embedding-v3", api_key=api_key, base_url=base_url, check_embedding_ctx_length=False)
@@ -252,7 +265,7 @@ def parse_intake_message(user_message: str) -> dict:
         return local_result
     if not local_result.get("missing_fields"):
         return local_result
-    if not api_key or api_key.startswith("dummy_"):
+    if not _llm_enabled():
         return local_result
 
     try:
@@ -361,6 +374,17 @@ def _sugar_from_knowledge(base_sugar: float, ratio: float, sugar_level: str, mul
 
 
 def _estimate_nutrition_with_fallback(brand: str, name: str, drink_type: str, volume: int, sugar_level: str) -> dict:
+    if not _llm_enabled():
+        local_est = estimate_nutrition(brand, name, drink_type, volume, sugar_level)
+        return {
+            "caffeine": local_est["caffeine"],
+            "sugar": local_est["sugar"],
+            "source": local_est["source"],
+            "method": "LOCAL",
+            "confidence": local_est["confidence"],
+            "reasoning": "; ".join(local_est["reasoning"]),
+        }
+
     try:
         class HybridAIEstimation(BaseModel):
             caffeine: float = Field(description="Estimated caffeine in mg.")
@@ -579,6 +603,18 @@ def enrich_drink_data(r: dict, db) -> dict:
         except Exception as e:
             print(f"[RAG Error] {e}")
 
+    if not _llm_enabled():
+        local_est = estimate_nutrition(brand, name, drink_type, volume, sugar_level)
+        r["caffeine"] = local_est["caffeine"]
+        r["sugarContent"] = local_est["sugar"]
+        r["data_source"] = local_est["source"]
+        r["confidence"] = local_est["confidence"]
+        r["reasoning"] = local_est["reasoning"]
+        r["estimation_method"] = "LOCAL_ESTIMATOR"
+        r["matched_knowledge_id"] = None
+        r["retrieval_score"] = None
+        return r
+
     # 3. AI 大模型常识估算 (Zero-shot fallback)
     try:
         class AIEstimation(BaseModel):
@@ -650,6 +686,8 @@ class ReportOutput(BaseModel):
 def generate_health_report(logs: list, report_type: str) -> dict:
     if not logs:
         return {"insights": []}
+    if not _llm_enabled():
+        return {"insights": []}
         
     system_prompt = f"""你是一个名为 DrinkMind Companion 的贴心饮品伴侣。你的目标是基于用户的饮品记录，提供有温度的【{report_type}】摄入分析。
 绝对不要像个死板的健身教练一样说教、命令或指责用户。
@@ -682,6 +720,9 @@ def generate_health_report(logs: list, report_type: str) -> dict:
 def generate_companion_response(user_message: str, history: List[Dict[str, str]], context: Dict[str, Any]) -> str:
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
     
+    if not _llm_enabled():
+        return "LLM companion is disabled in the current environment."
+
     try:
         sys_prompt = (
             "你是一个名叫 DrinkMind Companion 的 AI 饮品健康陪伴伴侣。\n"

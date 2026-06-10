@@ -2,6 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "backend"
+$env:ENABLE_LLM = "false"
+$env:DRINKMIND_OFFLINE = "true"
 
 function Invoke-Step {
     param(
