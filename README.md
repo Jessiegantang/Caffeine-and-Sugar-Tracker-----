@@ -11,12 +11,17 @@ explainability, and a human feedback review loop.
 - LangGraph StateGraph nutrition workflow used by manual logging and
   agent-assisted logging.
 - SQL and RAG knowledge priority for reviewed product nutrition data.
-- Composition Estimation fallback for drinks without a trusted exact match.
+- Composition Estimation fallback for drinks without a trusted exact match,
+  backed by ingredient-level range rules.
+- Backward-compatible best estimates in `caffeine` and `sugarContent`, with
+  optional `caffeine_range`, `sugar_range`, component-level ranges, and
+  `uncertainty_drivers` when composition estimation is used.
 - Explainability persistence and replay through `composition_json` and
-  `explainability_json` on `DrinkLog`, including `graph_trace` and
-  `verification` debugging metadata.
-- Human Feedback Loop for correcting one estimate and optionally submitting it
-  as reviewable evidence.
+  `explainability_json` on `DrinkLog`. The product UI defaults to a friendly
+  Estimate Result view, while LangGraph traces, retrieval score, raw reasoning,
+  components, and verification details remain folded under technical details.
+- Human Feedback Loop for correcting one estimate through a simplified form and
+  optionally submitting it as reviewable evidence.
 - Knowledge Acquisition review flow from `ProductCandidate` and
   `NutritionEvidence` into `DrinkKnowledge`.
 - Composition eval report and PowerShell quality gate for regression checks.
@@ -115,7 +120,8 @@ venv\Scripts\python.exe tests\run_composition_eval_report.py
 ```
 
 The eval suite checks deterministic composition behavior, SQL knowledge
-priority, result shape, confidence ranges, and explainability payloads.
+priority, result shape, confidence ranges, component-level range fields, and
+explainability payloads.
 
 ## Nutrition Workflow
 
@@ -155,13 +161,25 @@ not been fully split out of `backend/agent.py`. For demos and debugging, the
 result explainability includes `explainability.graph_trace` and
 `explainability.verification`.
 
+Composition Estimation now uses ingredient-level range rules. The top-level
+`caffeine` and `sugarContent` fields remain best estimates for existing callers.
+Composition results can also include `caffeine_range`, `sugar_range`,
+`components[].caffeine_range_mg`, `components[].sugar_range_g`, and
+`composition.uncertainty_drivers`. Explainability should be read as a best
+estimate plus a likely range and the main sources of uncertainty, not as a
+lab-precise nutrition label.
+
+The frontend keeps this product-facing: users see an Estimate Result first.
+Technical details such as LangGraph workflow, retrieval score, raw reasoning,
+component lists, and verification remain available but folded by default.
+
 ## Demo Flow
 
 See `docs/demo_script.md` for a complete executable demo:
 
 1. Start backend and frontend.
 2. Log a coconut latte and show Composition Estimation.
-3. Open the Nutrition Explainability panel.
+3. Open the Estimate Result panel and expand technical details if needed.
 4. Replay saved explainability from a historical log.
 5. Submit nutrition feedback.
 6. Review the generated feedback evidence.
@@ -178,6 +196,7 @@ backend/
   database.py                     SQLAlchemy models and lightweight migrations
   agents/
     composition_agent.py          Deterministic component-based estimator
+    ingredient_rules.py           Ingredient-level range rules and helpers
     nutrition_pipeline.py         LangGraph nutrition workflow and stable contract
     nutrition_agent.py            Orchestrator-facing nutrition boundary
     orchestrator.py               LangGraph agent routing

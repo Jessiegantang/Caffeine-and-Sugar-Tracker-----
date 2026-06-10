@@ -12,6 +12,12 @@ from agents.composition_agent import (
 
 
 class CompositionAgentTests(unittest.TestCase):
+    def assert_valid_range(self, value, unit):
+        self.assertIsInstance(value, dict)
+        self.assertEqual(value["unit"], unit)
+        self.assertLessEqual(value["min"], value["best"])
+        self.assertLessEqual(value["best"], value["max"])
+
     def test_large_coconut_latte_estimates_espresso_and_coconut_milk(self):
         result = estimate_composition_nutrition({
             "brand": "Luckin",
@@ -27,6 +33,11 @@ class CompositionAgentTests(unittest.TestCase):
         self.assertEqual(composition["milk_base"], "coconut_milk")
         self.assertGreater(result["caffeine"], 100)
         self.assertGreater(result["sugarContent"], 20)
+        self.assert_valid_range(result["caffeine_range"], "mg")
+        self.assert_valid_range(result["sugar_range"], "g")
+        self.assertEqual(result["caffeine"], result["caffeine_range"]["best"])
+        self.assertEqual(result["sugarContent"], result["sugar_range"]["best"])
+        self.assertTrue(composition["uncertainty_drivers"])
 
     def test_americano_has_caffeine_but_near_zero_sugar_when_no_sugar(self):
         result = estimate_composition_nutrition({
@@ -39,6 +50,8 @@ class CompositionAgentTests(unittest.TestCase):
         self.assertEqual(result["composition"]["drink_type"], "americano")
         self.assertGreater(result["caffeine"], 100)
         self.assertLessEqual(result["sugarContent"], 1.0)
+        self.assert_valid_range(result["sugar_range"], "g")
+        self.assertLessEqual(result["sugar_range"]["max"], 2.0)
 
     def test_latte_includes_milk_natural_sugar(self):
         result = estimate_composition_nutrition({
@@ -54,6 +67,8 @@ class CompositionAgentTests(unittest.TestCase):
         ]
         self.assertTrue(milk_components)
         self.assertGreater(result["sugarContent"], 5)
+        self.assert_valid_range(milk_components[0]["sugar_range_g"], "g")
+        self.assertGreater(milk_components[0]["sugar_range_g"]["min"], 0)
 
     def test_milk_tea_includes_tea_caffeine_and_added_sugar(self):
         result = estimate_composition_nutrition({
@@ -133,8 +148,14 @@ class CompositionAgentTests(unittest.TestCase):
             self.assertIn("unit", component)
             self.assertIn("caffeine_mg", component)
             self.assertIn("sugar_g", component)
+            self.assertIn("caffeine_range_mg", component)
+            self.assertIn("sugar_range_g", component)
             self.assertIn("basis", component)
             self.assertIn("confidence", component)
+            self.assert_valid_range(component["caffeine_range_mg"], "mg")
+            self.assert_valid_range(component["sugar_range_g"], "g")
+        self.assert_valid_range(estimate["caffeine_range"], "mg")
+        self.assert_valid_range(estimate["sugar_range"], "g")
 
     def test_top_level_output_is_compatible_with_nutrition_result_fields(self):
         result = estimate_composition_nutrition({
@@ -156,12 +177,16 @@ class CompositionAgentTests(unittest.TestCase):
             "composition",
         ]:
             self.assertIn(key, result)
+        self.assertIn("caffeine_range", result)
+        self.assertIn("sugar_range", result)
         self.assertEqual(result["data_source"], "Composition Estimation Agent")
         self.assertEqual(result["estimation_method"], "COMPOSITION_ESTIMATION")
         self.assertIsNone(result["matched_knowledge_id"])
         self.assertIsNone(result["retrieval_score"])
         self.assertEqual(result["composition"]["drink_type"], "unknown")
         self.assertTrue(result["composition"]["warnings"])
+        self.assertGreaterEqual(result["sugar_range"]["max"] - result["sugar_range"]["min"], 10.0)
+        self.assertLess(result["confidence"], 0.5)
 
 
 if __name__ == "__main__":

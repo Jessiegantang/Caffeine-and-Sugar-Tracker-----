@@ -74,6 +74,7 @@ class CompositionEvalTests(unittest.TestCase):
                     self.assertEqual(explainability.get("used_knowledge_match"), expected["used_knowledge_match"])
                 if expected.get("drink_type") is not None:
                     self.assertEqual(composition.get("drink_type"), expected["drink_type"])
+                    self.assertTrue(composition.get("uncertainty_drivers"))
                 else:
                     self.assertIsNone(result.get("composition"))
 
@@ -89,6 +90,11 @@ class CompositionEvalTests(unittest.TestCase):
                 self.assertGreaterEqual(result.get("confidence"), expected["min_confidence"])
                 self.assertIsInstance(result.get("reasoning"), list)
                 self.assertIn("explainability", result)
+                if expected["used_composition"]:
+                    self.assertTrue(components)
+                    for component in components:
+                        self._assert_valid_range(component.get("caffeine_range_mg"), "mg")
+                        self._assert_valid_range(component.get("sugar_range_g"), "g")
 
     def _seed_knowledge(self, db, payload):
         if not payload:
@@ -99,6 +105,12 @@ class CompositionEvalTests(unittest.TestCase):
             db.commit()
         db.add(DrinkKnowledge(**payload))
         db.commit()
+
+    def _assert_valid_range(self, value, unit):
+        self.assertIsInstance(value, dict)
+        self.assertEqual(value.get("unit"), unit)
+        self.assertLessEqual(value.get("min"), value.get("best"))
+        self.assertLessEqual(value.get("best"), value.get("max"))
 
 
 if __name__ == "__main__":

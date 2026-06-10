@@ -15,18 +15,27 @@ function appendParsedIntake(parsedIntake) {
   if (!container || !parsedIntake || parsedIntake.intent !== 'log_drink') return;
 
   const missing = parsedIntake.missing_fields || [];
-  const statusText = missing.length
-    ? `Missing: ${missing.join(', ')}`
-    : 'Ready to fill drink form';
+  const name = parsedIntake.name || parsedIntake.drink_name || parsedIntake.product_name || '-';
+  const volume = parsedIntake.volume || parsedIntake.volume_ml || '-';
+  const sugar = parsedIntake.sugar || parsedIntake.sugar_level || parsedIntake.sweetness || '-';
+  const missingText = missing.length ? missing.join(', ') : 'None';
 
   const card = document.createElement('div');
   card.className = 'chat-msg assistant';
   card.innerHTML = `
     <span class="chat-avatar">AI</span>
     <div class="chat-bubble assistant-bubble">
-      <strong>Structured intake JSON</strong>
-      <pre class="chat-json">${escapeHtml(JSON.stringify(parsedIntake, null, 2))}</pre>
-      <div class="chat-parse-status">${escapeHtml(statusText)}</div>
+      <strong>Recognized drink details and filled the form.</strong>
+      <div class="chat-parse-summary">
+        <span>name: ${escapeHtml(name)}</span>
+        <span>volume: ${escapeHtml(volume)}${volume === '-' ? '' : ' ml'}</span>
+        <span>sugar: ${escapeHtml(sugar)}</span>
+        <span>missing: ${escapeHtml(missingText)}</span>
+      </div>
+      <details class="chat-structured-details">
+        <summary>Structured JSON</summary>
+        <pre class="chat-json">${escapeHtml(JSON.stringify(parsedIntake, null, 2))}</pre>
+      </details>
     </div>
   `;
   container.appendChild(card);

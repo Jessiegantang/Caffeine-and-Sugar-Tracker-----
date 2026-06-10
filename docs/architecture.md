@@ -2,8 +2,8 @@
 
 This document describes the current DrinkMind implementation. It focuses on the
 real data paths in the app: manual drink logging, agent-assisted draft logging,
-knowledge-prioritized nutrition estimation, Composition Estimation fallback,
-saved explainability, and the Human Feedback Loop.
+knowledge-prioritized nutrition estimation, Composition Estimation fallback with
+ingredient-level range rules, saved explainability, and the Human Feedback Loop.
 
 ## 1. Current System Overview
 
@@ -31,8 +31,8 @@ flowchart LR
     Graph --> Enrichment["lookup_knowledge<br/>enrich_drink_data reuse"]
     Enrichment --> SQL["SQLite DrinkKnowledge<br/>exact/alias/product match"]
     Enrichment --> RAG["ChromaDB RAG<br/>knowledge retrieval"]
-    Graph --> Composition["Composition Estimation Agent<br/>decompose + estimate nodes"]
-    Graph --> Result["Stable nutrition result<br/>totals + reasoning + explainability"]
+    Graph --> Composition["Composition Estimation Agent<br/>decompose + ingredient range rules"]
+    Graph --> Result["Stable nutrition result<br/>best estimates + ranges + explainability"]
 
     ManualLog --> PersistLog["Persist DrinkLog<br/>composition_json + explainability_json"]
     Result --> PersistLog
@@ -113,13 +113,34 @@ Current priority:
 
 The Composition Estimation Agent is deterministic. It estimates drink
 components such as espresso, milk base, tea base, fruit base, and syrup, then
-builds component-level reasoning and warnings.
+builds component-level reasoning, warnings, and uncertainty drivers. Ingredient
+rules live in `backend/agents/ingredient_rules.py` and provide likely ranges
+for caffeine and sugar contributors.
+
+Composition results remain backward compatible: `caffeine` and `sugarContent`
+are still best estimates for existing callers. Composition estimation can also
+return:
+
+- `caffeine_range`
+- `sugar_range`
+- `composition.components[].caffeine_range_mg`
+- `composition.components[].sugar_range_g`
+- `composition.uncertainty_drivers`
+
+Explainability should be interpreted as best estimate plus likely range plus
+the sources of uncertainty. SQL/RAG knowledge paths can continue returning
+single-point values when reviewed product data is available.
 
 For debugging and demos, explainability now also includes:
 
 - `explainability.graph_trace`: the executed LangGraph node sequence.
 - `explainability.verification`: non-mutating verification status, warnings,
   and issues produced by `verify_result`.
+
+The frontend defaults to a user-friendly Estimate Result view. Technical
+details such as LangGraph workflow, component lists, retrieval score, raw
+reasoning, and verification remain available but folded, so LangGraph is not
+the default user-facing message.
 
 ## 3. Manual Logging Path
 
@@ -163,7 +184,8 @@ sequenceDiagram
 Persistence details:
 
 - `composition_json` stores structured component estimates when Composition
-  Estimation is used.
+  Estimation is used, including component-level ranges and uncertainty drivers
+  when available.
 - `explainability_json` stores method, knowledge-match state, confidence,
   reasoning, assumptions, warnings, `graph_trace`, `verification`, and feedback
   metadata when present.
@@ -217,15 +239,19 @@ The frontend can later:
 - Click a historical log.
 - Rebuild the Nutrition Explainability panel from saved `composition` and
   `explainability`.
-- Show whether the estimate used knowledge, Composition Estimation, assumptions,
-  warnings, and prior feedback metadata.
+- Show the Estimate Result first, including best estimate, likely range when
+  available, and the plain-language source of uncertainty.
+- Keep knowledge/composition source, assumptions, warnings, LangGraph trace, raw
+  reasoning, and prior feedback metadata in folded technical details.
 
 This replay is persistence-based; it does not re-run the estimator.
 
 ## 6. Human Feedback Loop
 
 Feedback corrects one saved drink log immediately and can optionally stage
-reviewable evidence for future estimates.
+reviewable evidence for future estimates. The normal user form is simplified to
+the corrected caffeine/sugar values, source note, and review-queue option;
+brand/type/date and other metadata remain available only as advanced details.
 
 ```mermaid
 flowchart TD
@@ -303,10 +329,11 @@ features, but they are separate from the nutrition persistence path.
 2. Both paths enter the LangGraph Nutrition StateGraph through
    `estimate_drink_nutrition(drink, db)`.
 3. SQL/RAG knowledge has priority over Composition Estimation.
-4. Composition Estimation provides structured fallback reasoning instead of a
-   black-box final number.
-5. `explainability.graph_trace` and `explainability.verification` make the
-   workflow easy to inspect in demos.
+4. Composition Estimation provides a backward-compatible best estimate plus
+   likely range and uncertainty drivers instead of a black-box final number.
+5. The default UI message is the Estimate Result; `explainability.graph_trace`,
+   retrieval score, raw reasoning, and `explainability.verification` remain
+   folded for technical inspection.
 6. Saved explainability can be replayed from history.
 7. Feedback fixes one log immediately but only becomes reusable knowledge after
    review.

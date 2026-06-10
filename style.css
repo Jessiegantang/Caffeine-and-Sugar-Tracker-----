@@ -234,6 +234,10 @@ header {
   color: var(--caffeine-dark);
 }
 
+.agent-jump-btn-muted {
+  display: none;
+}
+
 .tab-icon {
   flex-shrink: 0;
 }
@@ -762,6 +766,63 @@ header {
   margin-bottom: 1rem;
 }
 
+.technical-details-block {
+  margin-bottom: 0.85rem;
+}
+
+.technical-details-block > summary,
+.nutrition-technical-details > summary,
+.feedback-advanced-details > summary,
+.chat-structured-details > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.technical-details-block > summary::-webkit-details-marker,
+.nutrition-technical-details > summary::-webkit-details-marker,
+.feedback-advanced-details > summary::-webkit-details-marker,
+.chat-structured-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.technical-details-block > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.65rem;
+}
+
+.technical-details-block > summary::before,
+.nutrition-technical-details > summary::before,
+.feedback-advanced-details > summary::before,
+.chat-structured-details > summary::before {
+  content: '+';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-right: 0.35rem;
+  border-radius: 999px;
+  background: #eef5f2;
+  color: var(--caffeine-primary);
+}
+
+.technical-details-block[open] > summary::before,
+.nutrition-technical-details[open] > summary::before,
+.feedback-advanced-details[open] > summary::before,
+.chat-structured-details[open] > summary::before {
+  content: '-';
+}
+
+.technical-details-block > summary .card-title {
+  margin-bottom: 0;
+}
+
 .agent-workspace-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -913,14 +974,40 @@ header {
   grid-column: 1 / -1;
 }
 
+.estimate-result-panel {
+  margin-top: 0.85rem;
+}
+
 .nutrition-explainability-body {
   gap: 0.75rem;
 }
 
+.estimate-result-summary,
 .nutrition-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.5rem;
+}
+
+.estimate-explanation {
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.45rem;
+  background: #f8faf9;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.nutrition-technical-details {
+  padding-top: 0.2rem;
+}
+
+.nutrition-technical-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
 }
 
 .nutrition-feedback-form {
@@ -935,6 +1022,18 @@ header {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.5rem;
+}
+
+.feedback-form-grid-simple {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.feedback-advanced-details {
+  padding: 0.55rem 0;
+}
+
+.feedback-advanced-details .feedback-form-grid {
+  margin-top: 0.55rem;
 }
 
 .nutrition-feedback-form label {
@@ -2371,6 +2470,37 @@ body {
   background: #1f2a2e;
   color: #ffffff;
   box-shadow: 0 8px 18px rgba(31, 42, 46, 0.16);
+}
+
+.chat-parse-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.chat-parse-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-structured-details {
+  margin-top: 8px;
+}
+
+.chat-json {
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .weekly-aggregates-grid,

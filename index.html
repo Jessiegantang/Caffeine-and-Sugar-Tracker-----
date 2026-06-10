@@ -60,7 +60,7 @@
         </svg>
         数据库管理
       </button>
-      <a class="agent-jump-btn" href="#agent-workspace">Agent Workspace</a>
+      <a class="agent-jump-btn agent-jump-btn-muted" href="#agent-workspace">Technical details</a>
     </div>
 
     <!-- Main Workspace Layout -->
@@ -420,13 +420,14 @@
               </section>
 
               <section class="agent-workspace-section card glass" id="agent-workspace">
-                <div class="section-header-row">
-                  <h3 class="card-title">Agent Workspace</h3>
-                  <button type="button" class="agent-small-btn" id="agent-refresh-btn">Refresh</button>
-                </div>
+                <details class="technical-details-block">
+                  <summary>
+                    <span class="card-title">Technical details / Agent diagnostics</span>
+                    <button type="button" class="agent-small-btn" id="agent-refresh-btn">Refresh</button>
+                  </summary>
 
-                <div class="agent-workspace-grid">
-                  <div class="agent-panel">
+                  <div class="agent-workspace-grid">
+                    <div class="agent-panel">
                     <div class="agent-panel-header">
                       <span>Health Plan</span>
                     </div>
@@ -452,12 +453,14 @@
                     <div id="trace-list" class="agent-panel-body muted">No traces</div>
                   </div>
 
-                  <div class="agent-panel nutrition-explainability-panel">
-                    <div class="agent-panel-header">
-                      <span>Nutrition Explainability</span>
-                    </div>
-                    <div id="nutrition-explainability-panel" class="agent-panel-body muted">No nutrition estimate yet</div>
                   </div>
+                </details>
+
+                <div class="agent-panel nutrition-explainability-panel estimate-result-panel">
+                  <div class="agent-panel-header">
+                    <span>Estimate Result</span>
+                  </div>
+                  <div id="nutrition-explainability-panel" class="agent-panel-body muted">No nutrition estimate yet</div>
                 </div>
               </section>
 

@@ -9,33 +9,25 @@ from __future__ import annotations
 
 from typing import Any
 
+from .ingredient_rules import (
+    COCONUT_MILK_SUGAR_G_PER_100ML,
+    ESPRESSO_CAFFEINE_MG_PER_SHOT,
+    FRUIT_BASE_SUGAR_G_PER_100ML,
+    FRUIT_TEA_CAFFEINE_MG_PER_100ML,
+    MILK_SUGAR_G_PER_100ML,
+    MILK_TEA_CAFFEINE_MG_PER_100ML,
+    OAT_MILK_SUGAR_G_PER_100ML,
+    SUGAR_ALIASES,
+    SWEETNESS_MULTIPLIERS,
+    SYRUP_SUGAR_G_PER_PUMP,
+    RangeEstimate,
+    add_ranges,
+    scale_range,
+    zero_range,
+)
 
-ESPRESSO_CAFFEINE_MG = 70.0
+
 ESPRESSO_SHOT_ML = 30.0
-MILK_SUGAR_G_PER_100ML = 5.0
-COCONUT_MILK_SUGAR_G_PER_100ML = 8.0
-OAT_MILK_SUGAR_G_PER_100ML = 4.5
-MILK_TEA_CAFFEINE_MG_PER_100ML = 25.0
-FRUIT_TEA_CAFFEINE_MG_PER_100ML = 8.0
-FRUIT_BASE_SUGAR_G_PER_100ML = 9.0
-SYRUP_SUGAR_G_PER_PUMP = 6.0
-
-SWEETNESS_MULTIPLIERS = {
-    "none": 0.0,
-    "three": 0.3,
-    "half": 0.5,
-    "seven": 0.7,
-    "full": 1.0,
-    "unknown": 0.5,
-}
-
-SUGAR_ALIASES = {
-    "none": ["none", "no", "zero", "sugar-free", "sugar free", "unsweetened", "0", "0%", "wu tang", "no sugar"],
-    "three": ["three", "3", "30%", "san fen", "san fen tang", "less sugar"],
-    "half": ["half", "50%", "ban tang", "wu fen", "wu fen tang"],
-    "seven": ["seven", "70%", "qi fen", "qi fen tang"],
-    "full": ["full", "100%", "regular", "normal", "quan tang", "full sugar"],
-}
 
 
 def decompose_drink(drink: dict) -> dict:
@@ -51,6 +43,7 @@ def decompose_drink(drink: dict) -> dict:
     assumptions: list[str] = []
     warnings: list[str] = []
     natural_sources: list[str] = []
+    uncertainty_drivers: list[str] = []
 
     composition: dict[str, Any] = {
         "drink_type": drink_type,
@@ -68,6 +61,7 @@ def decompose_drink(drink: dict) -> dict:
         "natural_sugar_sources": natural_sources,
         "assumptions": assumptions,
         "warnings": warnings,
+        "uncertainty_drivers": uncertainty_drivers,
         "confidence": 0.75,
         "input": {
             "brand": brand,
@@ -80,6 +74,7 @@ def decompose_drink(drink: dict) -> dict:
 
     if sugar_level == "unknown":
         warnings.append("Sweetness level is unknown; using half-sugar added sweetener assumption.")
+        uncertainty_drivers.append("Sweetness level is unknown, so added syrup is estimated from a half-sugar assumption.")
         composition["confidence"] -= 0.12
 
     if drink_type == "coconut_latte":
@@ -94,6 +89,8 @@ def decompose_drink(drink: dict) -> dict:
         })
         natural_sources.append("coconut_milk")
         assumptions.append("Coconut latte is modeled as espresso plus sweetened coconut milk base.")
+        uncertainty_drivers.append("Espresso caffeine varies by shot size and extraction.")
+        uncertainty_drivers.append("Coconut milk sugar varies by brand recipe and milk volume.")
     elif drink_type == "oat_latte":
         shots = _coffee_shots(volume, style="milk")
         milk_ml = _remaining_milk_volume(volume, shots, fill_ratio=0.68)
@@ -106,6 +103,8 @@ def decompose_drink(drink: dict) -> dict:
         })
         natural_sources.append("oat_milk")
         assumptions.append("Oat latte is modeled as espresso plus oat milk.")
+        uncertainty_drivers.append("Espresso caffeine varies by shot size and extraction.")
+        uncertainty_drivers.append("Oat milk sugar varies by product formula and milk volume.")
     elif drink_type == "latte":
         shots = _coffee_shots(volume, style="milk")
         milk_ml = _remaining_milk_volume(volume, shots, fill_ratio=0.68)
@@ -118,6 +117,8 @@ def decompose_drink(drink: dict) -> dict:
         })
         natural_sources.append("milk")
         assumptions.append("Latte is modeled as espresso plus milk.")
+        uncertainty_drivers.append("Espresso caffeine varies by shot size and extraction.")
+        uncertainty_drivers.append("Milk volume is inferred from cup size, so natural milk sugar is a range.")
     elif drink_type == "americano":
         shots = _coffee_shots(volume, style="americano")
         composition.update({
@@ -126,6 +127,7 @@ def decompose_drink(drink: dict) -> dict:
             "syrup_pumps": _syrup_pumps(volume, drink_type, sugar_level),
         })
         assumptions.append("Americano is modeled as espresso diluted with water.")
+        uncertainty_drivers.append("Espresso caffeine varies by shot size and extraction.")
     elif drink_type == "milk_tea":
         tea_ml = round(volume * 0.62, 1)
         milk_ml = round(volume * 0.22, 1)
@@ -138,6 +140,8 @@ def decompose_drink(drink: dict) -> dict:
         })
         natural_sources.append("milk")
         assumptions.append("Milk tea is modeled as tea base, milk, and adjustable added syrup.")
+        uncertainty_drivers.append("Tea caffeine and milk ratio vary across milk tea recipes.")
+        uncertainty_drivers.append("Sweetness labels map to brand-specific standard syrup amounts.")
     elif drink_type == "fruit_tea":
         fruit_ml = round(volume * 0.58, 1)
         tea_ml = round(volume * 0.30, 1)
@@ -150,6 +154,8 @@ def decompose_drink(drink: dict) -> dict:
         })
         natural_sources.append("fruit_or_juice_base")
         assumptions.append("Fruit tea is modeled as tea plus fruit or juice base.")
+        uncertainty_drivers.append("Fruit or juice base sugar varies by fruit mix and recipe concentration.")
+        uncertainty_drivers.append("Tea caffeine is estimated from a light tea base range.")
     else:
         composition.update({
             "drink_type": "unknown",
@@ -161,6 +167,7 @@ def decompose_drink(drink: dict) -> dict:
         natural_sources.append("generic_beverage_base")
         warnings.append("Unknown drink style; using conservative generic beverage assumptions.")
         assumptions.append("Fallback composition uses a small generic sugar-containing base plus optional sweetener.")
+        uncertainty_drivers.append("Drink style is unknown, so both composition and sugar density use broad generic assumptions.")
 
     composition["confidence"] = _clamp_confidence(composition["confidence"])
     return composition
@@ -170,94 +177,144 @@ def estimate_from_composition(composition: dict) -> dict:
     """Estimate caffeine and sugar totals from a composition dictionary."""
     components: list[dict[str, Any]] = []
     reasoning: list[str] = []
+    caffeine_ranges: list[RangeEstimate] = []
+    sugar_ranges: list[RangeEstimate] = []
 
     shots = float(composition.get("espresso_shots") or 0)
     if shots > 0:
-        caffeine = shots * ESPRESSO_CAFFEINE_MG
+        caffeine_range = scale_range(ESPRESSO_CAFFEINE_MG_PER_SHOT, shots)
+        caffeine_ranges.append(caffeine_range)
+        sugar_range = zero_range("g")
+        sugar_ranges.append(sugar_range)
         components.append(_component(
             name="espresso",
             category="coffee_base",
             amount=shots,
             unit="shot",
-            caffeine_mg=caffeine,
-            sugar_g=0.0,
-            basis=f"{ESPRESSO_CAFFEINE_MG:g}mg caffeine per espresso shot",
+            caffeine_range_mg=caffeine_range,
+            sugar_range_g=sugar_range,
+            basis=(
+                f"{ESPRESSO_CAFFEINE_MG_PER_SHOT['min']:g}-"
+                f"{ESPRESSO_CAFFEINE_MG_PER_SHOT['max']:g}mg caffeine per espresso shot, "
+                f"best {ESPRESSO_CAFFEINE_MG_PER_SHOT['best']:g}mg"
+            ),
             confidence=0.82,
         ))
-        reasoning.append(f"Estimated espresso caffeine from {shots:g} shot(s).")
+        reasoning.append(
+            f"Estimated espresso caffeine range from {shots:g} shot(s): "
+            f"{caffeine_range['min']:g}-{caffeine_range['max']:g}mg, best {caffeine_range['best']:g}mg."
+        )
 
     tea_ml = float(composition.get("tea_base_volume_ml") or 0)
     tea_base = composition.get("tea_base")
     if tea_ml > 0:
         density = FRUIT_TEA_CAFFEINE_MG_PER_100ML if composition.get("drink_type") == "fruit_tea" else MILK_TEA_CAFFEINE_MG_PER_100ML
-        caffeine = tea_ml * density / 100.0
+        caffeine_range = scale_range(density, tea_ml, divisor=100.0)
+        caffeine_ranges.append(caffeine_range)
+        sugar_range = zero_range("g")
+        sugar_ranges.append(sugar_range)
         components.append(_component(
             name=str(tea_base or "tea_base"),
             category="tea_base",
             amount=tea_ml,
             unit="ml",
-            caffeine_mg=caffeine,
-            sugar_g=0.0,
-            basis=f"{density:g}mg caffeine per 100ml tea base",
+            caffeine_range_mg=caffeine_range,
+            sugar_range_g=sugar_range,
+            basis=(
+                f"{density['min']:g}-{density['max']:g}mg caffeine per 100ml tea base, "
+                f"best {density['best']:g}mg"
+            ),
             confidence=0.68,
         ))
-        reasoning.append("Estimated tea caffeine from tea base volume.")
+        reasoning.append(
+            f"Estimated tea caffeine range from tea base volume: "
+            f"{caffeine_range['min']:g}-{caffeine_range['max']:g}mg."
+        )
 
     milk_ml = float(composition.get("milk_volume_ml") or 0)
     milk_base = composition.get("milk_base")
     if milk_ml > 0:
         sugar_density = _milk_sugar_density(str(milk_base or "milk"))
-        sugar = milk_ml * sugar_density / 100.0
+        caffeine_range = zero_range("mg")
+        caffeine_ranges.append(caffeine_range)
+        sugar_range = scale_range(sugar_density, milk_ml, divisor=100.0)
+        sugar_ranges.append(sugar_range)
         components.append(_component(
             name=str(milk_base or "milk"),
             category="milk_base",
             amount=milk_ml,
             unit="ml",
-            caffeine_mg=0.0,
-            sugar_g=sugar,
-            basis=f"{sugar_density:g}g sugar per 100ml {milk_base or 'milk'}",
+            caffeine_range_mg=caffeine_range,
+            sugar_range_g=sugar_range,
+            basis=(
+                f"{sugar_density['min']:g}-{sugar_density['max']:g}g sugar per 100ml "
+                f"{milk_base or 'milk'}, best {sugar_density['best']:g}g"
+            ),
             confidence=0.72,
         ))
-        reasoning.append(f"Included natural sugar from {milk_base or 'milk'}.")
+        reasoning.append(
+            f"Included natural sugar range from {milk_base or 'milk'}: "
+            f"{sugar_range['min']:g}-{sugar_range['max']:g}g."
+        )
 
     fruit_ml = float(composition.get("fruit_base_volume_ml") or 0)
     fruit_base = composition.get("fruit_base")
     if fruit_ml > 0:
         sugar_density = FRUIT_BASE_SUGAR_G_PER_100ML
-        sugar = fruit_ml * sugar_density / 100.0
+        caffeine_range = zero_range("mg")
+        caffeine_ranges.append(caffeine_range)
+        sugar_range = scale_range(sugar_density, fruit_ml, divisor=100.0)
+        sugar_ranges.append(sugar_range)
         components.append(_component(
             name=str(fruit_base or "fruit_base"),
             category="fruit_base",
             amount=fruit_ml,
             unit="ml",
-            caffeine_mg=0.0,
-            sugar_g=sugar,
-            basis=f"{sugar_density:g}g sugar per 100ml fruit or juice base",
+            caffeine_range_mg=caffeine_range,
+            sugar_range_g=sugar_range,
+            basis=(
+                f"{sugar_density['min']:g}-{sugar_density['max']:g}g sugar per 100ml "
+                f"fruit or juice base, best {sugar_density['best']:g}g"
+            ),
             confidence=0.62 if composition.get("drink_type") == "unknown" else 0.70,
         ))
-        reasoning.append("Included natural sugar from fruit or beverage base.")
+        reasoning.append(
+            f"Included natural sugar range from fruit or beverage base: "
+            f"{sugar_range['min']:g}-{sugar_range['max']:g}g."
+        )
 
     pumps = float(composition.get("syrup_pumps") or 0)
     level = str(composition.get("sweetener_level") or "unknown")
     multiplier = SWEETNESS_MULTIPLIERS.get(level, SWEETNESS_MULTIPLIERS["unknown"])
     if pumps > 0 and multiplier > 0:
-        sugar = pumps * SYRUP_SUGAR_G_PER_PUMP * multiplier
+        caffeine_range = zero_range("mg")
+        caffeine_ranges.append(caffeine_range)
+        sugar_range = scale_range(SYRUP_SUGAR_G_PER_PUMP, pumps * multiplier)
+        sugar_ranges.append(sugar_range)
         components.append(_component(
             name="added_syrup",
             category="sweetener",
             amount=round(pumps * multiplier, 2),
             unit="pump_equivalent",
-            caffeine_mg=0.0,
-            sugar_g=sugar,
-            basis=f"{SYRUP_SUGAR_G_PER_PUMP:g}g sugar per syrup pump adjusted by sweetness level {level}",
+            caffeine_range_mg=caffeine_range,
+            sugar_range_g=sugar_range,
+            basis=(
+                f"{SYRUP_SUGAR_G_PER_PUMP['min']:g}-{SYRUP_SUGAR_G_PER_PUMP['max']:g}g sugar per syrup pump "
+                f"adjusted by sweetness level {level}, best {SYRUP_SUGAR_G_PER_PUMP['best']:g}g"
+            ),
             confidence=0.66 if level == "unknown" else 0.74,
         ))
-        reasoning.append(f"Added sugar adjusted by sweetness level '{level}'.")
+        reasoning.append(
+            f"Added sugar range adjusted by sweetness level '{level}': "
+            f"{sugar_range['min']:g}-{sugar_range['max']:g}g."
+        )
     elif pumps > 0:
         reasoning.append("No added syrup sugar because sweetness level is none.")
 
-    caffeine_total = round(sum(item["caffeine_mg"] for item in components), 1)
-    sugar_total = round(sum(item["sugar_g"] for item in components), 1)
+    caffeine_total_range = add_ranges(caffeine_ranges, "mg")
+    sugar_total_range = add_ranges(sugar_ranges, "g")
+    caffeine_total = caffeine_total_range["best"]
+    sugar_total = sugar_total_range["best"]
     component_confidence = _average([item["confidence"] for item in components], default=0.5)
     confidence = min(float(composition.get("confidence") or 0.5), component_confidence)
 
@@ -267,6 +324,8 @@ def estimate_from_composition(composition: dict) -> dict:
     return {
         "caffeine": caffeine_total,
         "sugarContent": sugar_total,
+        "caffeine_range": caffeine_total_range,
+        "sugar_range": sugar_total_range,
         "components": components,
         "reasoning": reasoning,
         "confidence": _clamp_confidence(confidence),
@@ -285,6 +344,8 @@ def estimate_composition_nutrition(drink: dict) -> dict:
     return {
         "caffeine": estimate["caffeine"],
         "sugarContent": estimate["sugarContent"],
+        "caffeine_range": estimate["caffeine_range"],
+        "sugar_range": estimate["sugar_range"],
         "data_source": "Composition Estimation Agent",
         "confidence": estimate["confidence"],
         "reasoning": estimate["reasoning"],
@@ -372,7 +433,7 @@ def _syrup_pumps(volume: int, drink_type: str, sugar_level: str) -> float:
     return 2.0
 
 
-def _milk_sugar_density(milk_base: str) -> float:
+def _milk_sugar_density(milk_base: str) -> RangeEstimate:
     if "coconut" in milk_base:
         return COCONUT_MILK_SUGAR_G_PER_100ML
     if "oat" in milk_base:
@@ -386,8 +447,8 @@ def _component(
     category: str,
     amount: float,
     unit: str,
-    caffeine_mg: float,
-    sugar_g: float,
+    caffeine_range_mg: RangeEstimate,
+    sugar_range_g: RangeEstimate,
     basis: str,
     confidence: float,
 ) -> dict:
@@ -396,8 +457,10 @@ def _component(
         "category": category,
         "amount": round(amount, 2),
         "unit": unit,
-        "caffeine_mg": round(caffeine_mg, 1),
-        "sugar_g": round(sugar_g, 1),
+        "caffeine_mg": caffeine_range_mg["best"],
+        "sugar_g": sugar_range_g["best"],
+        "caffeine_range_mg": caffeine_range_mg,
+        "sugar_range_g": sugar_range_g,
         "basis": basis,
         "confidence": _clamp_confidence(confidence),
     }

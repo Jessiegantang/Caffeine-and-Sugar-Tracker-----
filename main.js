@@ -410,39 +410,129 @@ function renderNutritionExplainabilityPanel() {
   const feedback = explainability.feedback || result.feedback || null;
   const graphTrace = Array.isArray(explainability.graph_trace) ? explainability.graph_trace : [];
   const verification = explainability.verification || null;
+  const confidenceValue = result.confidence ?? explainability.confidence ?? 0;
+  const userSource = mapEstimateSource(result, explainability, feedback);
+  const userExplanation = getEstimateExplanation(userSource, explainability, result);
 
   panel.className = 'agent-panel-body nutrition-explainability-body';
   panel.innerHTML = `
-    <div class="nutrition-summary-grid">
-      ${renderNutritionMetric('Method', result.estimation_method || explainability.method || 'Unknown')}
-      ${renderNutritionMetric('Source', result.data_source || 'Unknown')}
-      ${renderNutritionMetric('Confidence', formatConfidence(result.confidence ?? explainability.confidence ?? 0))}
-      ${renderNutritionMetric('Estimate', `${formatNumber(result.caffeine)}mg caffeine / ${formatNumber(result.sugarContent)}g sugar`)}
+    <div class="estimate-result-summary">
+      ${renderNutritionMetric('Caffeine', `${formatNumber(result.caffeine)} mg`)}
+      ${renderNutritionMetric('Sugar', `${formatNumber(result.sugarContent)} g`)}
+      ${renderNutritionMetric('Confidence', mapConfidenceLevel(confidenceValue))}
+      ${renderNutritionMetric('Source', userSource)}
     </div>
 
-    <div class="nutrition-explain-section">
-      <div class="nutrition-explain-title">Knowledge match</div>
-      <div class="explain-chips">
-        <span class="explain-chip">used: ${usedKnowledge ? 'yes' : 'no'}</span>
-        ${matchedId ? `<span class="explain-chip">id: ${escapeHtml(matchedId)}</span>` : ''}
-        ${retrievalScore !== null && retrievalScore !== undefined ? `<span class="explain-chip">score: ${escapeHtml(Number(retrievalScore).toFixed(3))}</span>` : ''}
-      </div>
-    </div>
+    <div class="estimate-explanation">${escapeHtml(userExplanation)}</div>
 
-    ${renderLangGraphWorkflow(graphTrace, verification)}
-
-    <div class="nutrition-explain-section">
-      <div class="nutrition-explain-title">Composition</div>
-      ${usedComposition
-        ? renderComponentsTable(components)
-        : '<div class="nutrition-empty-note">Not used; exact knowledge match was available.</div>'}
-    </div>
-
-    ${renderTextList('Reasoning', reasoning)}
-    ${renderTextList('Assumptions', assumptions)}
-    ${renderTextList('Warnings', warnings, 'warning')}
-    ${renderFeedbackMetadata(feedback, result.feedback_notice)}
+    ${renderNutritionTechnicalDetails({
+      result,
+      explainability,
+      usedKnowledge,
+      matchedId,
+      retrievalScore,
+      usedComposition,
+      components,
+      reasoning,
+      assumptions,
+      warnings,
+      graphTrace,
+      verification,
+      feedback
+    })}
     ${renderNutritionFeedbackForm(result)}
+  `;
+}
+
+function mapConfidenceLevel(value) {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return 'Low';
+  if (num >= 0.8) return 'High';
+  if (num >= 0.55) return 'Medium';
+  return 'Low';
+}
+
+function mapEstimateSource(result, explainability, feedback) {
+  const method = String(result.estimation_method || explainability.method || '').toLowerCase();
+  const source = String(result.data_source || '').toLowerCase();
+  if (feedback?.corrected || method.includes('feedback') || source.includes('user')) return 'User corrected';
+  if (explainability.used_knowledge_match || result.matched_knowledge_id || source.includes('knowledge')) return 'Knowledge match';
+  if (explainability.used_composition || result.composition || method.includes('composition')) return 'Composition estimate';
+  return 'Fallback estimate';
+}
+
+function getEstimateExplanation(source, explainability, result) {
+  if (source === 'User corrected') {
+    return 'This estimate includes a user correction saved for this drink log.';
+  }
+  if (source === 'Knowledge match') {
+    return 'This uses a reviewed drink knowledge match.';
+  }
+  if (source === 'Composition estimate') {
+    return 'No trusted product match was found, so this was estimated from likely ingredients.';
+  }
+  if (result.feedback_notice) {
+    return result.feedback_notice;
+  }
+  if (explainability.warnings?.length) {
+    return 'This is a fallback estimate and may need correction if you have label details.';
+  }
+  return 'This is a fallback estimate based on the available drink details.';
+}
+
+function renderNutritionTechnicalDetails(details) {
+  const {
+    result,
+    explainability,
+    usedKnowledge,
+    matchedId,
+    retrievalScore,
+    usedComposition,
+    components,
+    reasoning,
+    assumptions,
+    warnings,
+    graphTrace,
+    verification,
+    feedback
+  } = details;
+
+  return `
+    <details class="nutrition-technical-details">
+      <summary>Technical details</summary>
+      <div class="nutrition-technical-stack">
+        <div class="nutrition-explain-section">
+          <div class="nutrition-explain-title">Method</div>
+          <div class="explain-chips">
+            <span class="explain-chip">method: ${escapeHtml(result.estimation_method || explainability.method || 'Unknown')}</span>
+            <span class="explain-chip">raw source: ${escapeHtml(result.data_source || 'Unknown')}</span>
+          </div>
+        </div>
+
+        <div class="nutrition-explain-section">
+          <div class="nutrition-explain-title">Knowledge match</div>
+          <div class="explain-chips">
+            <span class="explain-chip">used: ${usedKnowledge ? 'yes' : 'no'}</span>
+            ${matchedId ? `<span class="explain-chip">id: ${escapeHtml(matchedId)}</span>` : ''}
+            ${retrievalScore !== null && retrievalScore !== undefined ? `<span class="explain-chip">score: ${escapeHtml(Number(retrievalScore).toFixed(3))}</span>` : ''}
+          </div>
+        </div>
+
+        ${renderLangGraphWorkflow(graphTrace, verification)}
+
+        <div class="nutrition-explain-section">
+          <div class="nutrition-explain-title">Composition</div>
+          ${usedComposition
+            ? renderComponentsTable(components)
+            : '<div class="nutrition-empty-note">Not used; exact knowledge match was available.</div>'}
+        </div>
+
+        ${renderTextList('Reasoning', reasoning)}
+        ${renderTextList('Assumptions', assumptions)}
+        ${renderTextList('Warnings', warnings, 'warning')}
+        ${renderFeedbackMetadata(feedback, result.feedback_notice)}
+      </div>
+    </details>
   `;
 }
 
@@ -614,19 +704,26 @@ function renderNutritionFeedbackForm(result) {
   return `
     <form id="nutrition-feedback-form" class="nutrition-feedback-form" data-log-id="${escapeAttr(logId)}">
       <div class="nutrition-explain-title">Correct estimate</div>
-      <div class="feedback-form-grid">
-        <label>Brand<input name="brand" value="${escapeAttr(brand)}"></label>
-        <label>Name<input name="name" value="${escapeAttr(name)}" required></label>
-        <label>Type<select name="type">${renderFeedbackTypeOptions(type)}</select></label>
-        <label>Volume<input name="volume" type="number" min="10" max="2000" value="${escapeAttr(volume)}" required></label>
+      <div class="feedback-form-grid feedback-form-grid-simple">
         <label>Caffeine<input name="caffeine" type="number" min="0" max="800" step="0.1" value="${escapeAttr(caffeine)}" required></label>
         <label>Sugar<input name="sugarContent" type="number" min="0" max="150" step="0.1" value="${escapeAttr(sugarContent)}" required></label>
       </div>
-      <label class="feedback-note-label">Evidence note<textarea name="source_note" rows="2" placeholder="Package label says caffeine 120mg, sugar 18g"></textarea></label>
+      <label class="feedback-note-label">Source note<textarea name="source_note" rows="2" placeholder="Package label says caffeine 120mg, sugar 18g"></textarea></label>
       <div class="feedback-options">
         <label><input type="checkbox" name="apply_to_log" checked> Update this log</label>
-        <label><input type="checkbox" name="submit_as_evidence"> Add to review queue</label>
       </div>
+      <details class="feedback-advanced-details">
+        <summary>Advanced correction fields</summary>
+        <div class="feedback-form-grid">
+          <label>Brand<input name="brand" value="${escapeAttr(brand)}"></label>
+          <label>Name<input name="name" value="${escapeAttr(name)}" required></label>
+          <label>Type<select name="type">${renderFeedbackTypeOptions(type)}</select></label>
+          <label>Volume<input name="volume" type="number" min="10" max="2000" value="${escapeAttr(volume)}" required></label>
+        </div>
+        <div class="feedback-options">
+          <label><input type="checkbox" name="submit_as_evidence"> Add to review queue</label>
+        </div>
+      </details>
       <div class="feedback-actions">
         <button type="submit" class="btn btn-primary">Submit correction</button>
         <span class="feedback-status" id="nutrition-feedback-status"></span>
@@ -721,7 +818,10 @@ async function handleNutritionFeedbackSubmit(form) {
       saveLogs(state.logs);
       renderApp();
     }
-    state.lastNutritionResult = buildNutritionResultFromLog(updatedLog, data.evidence ? 'Feedback added to review queue' : 'Feedback saved');
+    const noticeParts = [];
+    if (payload.apply_to_log) noticeParts.push('This log was updated.');
+    if (data.evidence || payload.submit_as_evidence) noticeParts.push('Feedback added to review queue.');
+    state.lastNutritionResult = buildNutritionResultFromLog(updatedLog, noticeParts.join(' ') || 'Feedback saved');
     renderNutritionExplainabilityPanel();
   } catch (e) {
     if (status) {

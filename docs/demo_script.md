@@ -48,29 +48,35 @@ Expected result:
 - If no trusted SQL/RAG match exists for that product, the method should show
   Composition Estimation behavior rather than a product knowledge match.
 
-## 3. Open The Nutrition Explainability Panel
+## 3. Open The Estimate Result Panel
 
-Open the Nutrition Explainability panel after the estimate appears.
+Open the Estimate Result panel after the estimate appears.
 
 Show:
 
-- Method and source.
+- The user-friendly source label, such as Composition estimate or Knowledge
+  match.
 - Confidence.
-- Estimated caffeine and sugar.
-- Whether a knowledge match was used.
-- Components such as espresso, coconut milk/base, syrup, assumptions, and
-  warnings when Composition Estimation is used.
-- `explainability.graph_trace`, which shows the LangGraph nodes executed.
-- `explainability.verification`, which shows non-mutating verification warnings
-  and issues for the estimate.
+- Estimated caffeine and sugar best estimates.
+- The likely range when Composition Estimation provides `caffeine_range` and
+  `sugar_range`.
+- Plain-language uncertainty sources, such as espresso variation or inferred
+  milk volume.
 
 Explain the key point:
 
 ```text
-DrinkMind now runs nutrition estimation through a LangGraph StateGraph. It does
-not only output final caffeine/sugar numbers; it stores the workflow trace and
-reasoning shape needed to replay and inspect the estimate later.
+DrinkMind shows a simple estimate first: best caffeine and sugar values, plus a
+likely range when exact product nutrition is unavailable.
 ```
+
+Then expand Technical details if you want to show the implementation depth:
+
+- Whether a knowledge match was used.
+- Components such as espresso, coconut milk/base, syrup, assumptions, and
+  warnings when Composition Estimation is used.
+- `explainability.graph_trace`, which shows the LangGraph nodes executed.
+- Retrieval score, raw reasoning, and `explainability.verification`.
 
 The graph nodes are:
 
@@ -109,15 +115,17 @@ Click the saved drink in the historical log list.
 
 Expected result:
 
-- The Nutrition Explainability panel is rebuilt from the saved log.
+- The Estimate Result panel is rebuilt from the saved log.
 - It uses `composition_json` and `explainability_json`.
 - The estimator is not re-run just to display the historical reasoning.
 
-This demonstrates explainability persistence/replay.
+This demonstrates explainability persistence/replay. Historical logs should
+still default to the friendly Estimate Result view, with LangGraph and raw
+diagnostics folded under technical details.
 
 ## 5. Submit Nutrition Feedback
 
-In the Nutrition Explainability panel, use the correction form for the saved
+In the Estimate Result panel, use the simplified correction form for the saved
 drink.
 
 Example correction:
@@ -144,8 +152,9 @@ Submit the feedback.
 Expected result:
 
 - The current `DrinkLog` values update immediately.
-- The explainability panel shows feedback metadata.
+- The Estimate Result panel shows feedback metadata.
 - The frontend shows that feedback was added to the review queue.
+- Advanced correction metadata remains folded for normal users.
 
 ## 6. Show Feedback Evidence In The Review Queue
 
