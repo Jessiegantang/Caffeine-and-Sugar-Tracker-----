@@ -923,6 +923,82 @@ header {
   gap: 0.5rem;
 }
 
+.nutrition-feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.feedback-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.nutrition-feedback-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.nutrition-feedback-form input,
+.nutrition-feedback-form select,
+.nutrition-feedback-form textarea {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 0.45rem 0.5rem;
+}
+
+.feedback-note-label textarea {
+  resize: vertical;
+  min-height: 3rem;
+}
+
+.feedback-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.feedback-options label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+}
+
+.feedback-options input {
+  width: auto;
+}
+
+.feedback-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.feedback-status {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.feedback-status.error {
+  color: #ef4444;
+}
+
+.feedback-notice {
+  color: #16a34a;
+  font-weight: 600;
+}
+
 .nutrition-metric {
   min-width: 0;
   padding: 0.6rem;

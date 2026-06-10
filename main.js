@@ -81,6 +81,10 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, '&#096;');
+}
+
 // Load from backend and fallback to local storage
 async function loadInitialData() {
   await loadDatabaseAsync();
@@ -269,6 +273,12 @@ function setupEventListeners() {
     state.lastNutritionResult = e.detail || null;
     renderNutritionExplainabilityPanel();
   });
+  elements.nutritionExplainabilityPanel?.addEventListener('submit', (event) => {
+    if (event.target?.id === 'nutrition-feedback-form') {
+      event.preventDefault();
+      handleNutritionFeedbackSubmit(event.target);
+    }
+  });
   document.getElementById('agent-refresh-btn')?.addEventListener('click', renderAgentWorkspace);
   document.getElementById('plan-create-btn')?.addEventListener('click', handleCreateVisiblePlan);
   document.getElementById('memory-clear-btn')?.addEventListener('click', async () => {
@@ -397,6 +407,7 @@ function renderNutritionExplainabilityPanel() {
   const usedKnowledge = Boolean(explainability.used_knowledge_match);
   const retrievalScore = explainability.retrieval_score ?? result.retrieval_score;
   const matchedId = explainability.matched_knowledge_id ?? result.matched_knowledge_id;
+  const feedback = explainability.feedback || result.feedback || null;
 
   panel.className = 'agent-panel-body nutrition-explainability-body';
   panel.innerHTML = `
@@ -426,6 +437,8 @@ function renderNutritionExplainabilityPanel() {
     ${renderTextList('Reasoning', reasoning)}
     ${renderTextList('Assumptions', assumptions)}
     ${renderTextList('Warnings', warnings, 'warning')}
+    ${renderFeedbackMetadata(feedback, result.feedback_notice)}
+    ${renderNutritionFeedbackForm(result)}
   `;
 }
 
@@ -433,6 +446,11 @@ function showLogExplainability(log) {
   if (!log) return;
   if (log.explainability) {
     state.lastNutritionResult = {
+      log_id: log.id,
+      brand: log.brand,
+      name: log.name,
+      type: log.type,
+      volume: log.volume,
       caffeine: log.caffeine,
       sugarContent: log.sugarContent,
       confidence: log.confidence,
@@ -446,6 +464,11 @@ function showLogExplainability(log) {
     };
   } else {
     state.lastNutritionResult = {
+      log_id: log.id,
+      brand: log.brand,
+      name: log.name,
+      type: log.type,
+      volume: log.volume,
       caffeine: log.caffeine,
       sugarContent: log.sugarContent,
       confidence: log.confidence,
@@ -505,6 +528,64 @@ function renderComponentsTable(components) {
   `;
 }
 
+function renderFeedbackMetadata(feedback, notice = '') {
+  if (!feedback && !notice) return '';
+  return `
+    <div class="nutrition-explain-section feedback-summary">
+      <div class="nutrition-explain-title">Feedback</div>
+      ${notice ? `<div class="feedback-notice">${escapeHtml(notice)}</div>` : ''}
+      ${feedback ? `
+        <div class="explain-chips">
+          <span class="explain-chip">source: ${escapeHtml(feedback.source_type || 'user_feedback')}</span>
+          <span class="explain-chip">high delta: ${feedback.high_delta ? 'yes' : 'no'}</span>
+        </div>
+        ${feedback.source_note ? `<div class="nutrition-empty-note">${escapeHtml(feedback.source_note)}</div>` : ''}
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderNutritionFeedbackForm(result) {
+  const logId = result?.log_id;
+  if (!logId) return '';
+  const corrected = result.explainability?.feedback?.corrected || result.feedback?.corrected || {};
+  const brand = corrected.brand ?? result.brand ?? '';
+  const name = corrected.name ?? result.name ?? '';
+  const type = corrected.type ?? result.type ?? 'coffee';
+  const volume = corrected.volume ?? result.volume ?? 500;
+  const caffeine = corrected.caffeine ?? result.caffeine ?? 0;
+  const sugarContent = corrected.sugarContent ?? result.sugarContent ?? 0;
+
+  return `
+    <form id="nutrition-feedback-form" class="nutrition-feedback-form" data-log-id="${escapeAttr(logId)}">
+      <div class="nutrition-explain-title">Correct estimate</div>
+      <div class="feedback-form-grid">
+        <label>Brand<input name="brand" value="${escapeAttr(brand)}"></label>
+        <label>Name<input name="name" value="${escapeAttr(name)}" required></label>
+        <label>Type<select name="type">${renderFeedbackTypeOptions(type)}</select></label>
+        <label>Volume<input name="volume" type="number" min="10" max="2000" value="${escapeAttr(volume)}" required></label>
+        <label>Caffeine<input name="caffeine" type="number" min="0" max="800" step="0.1" value="${escapeAttr(caffeine)}" required></label>
+        <label>Sugar<input name="sugarContent" type="number" min="0" max="150" step="0.1" value="${escapeAttr(sugarContent)}" required></label>
+      </div>
+      <label class="feedback-note-label">Evidence note<textarea name="source_note" rows="2" placeholder="Package label says caffeine 120mg, sugar 18g"></textarea></label>
+      <div class="feedback-options">
+        <label><input type="checkbox" name="apply_to_log" checked> Update this log</label>
+        <label><input type="checkbox" name="submit_as_evidence"> Add to review queue</label>
+      </div>
+      <div class="feedback-actions">
+        <button type="submit" class="btn btn-primary">Submit correction</button>
+        <span class="feedback-status" id="nutrition-feedback-status"></span>
+      </div>
+    </form>
+  `;
+}
+
+function renderFeedbackTypeOptions(selected) {
+  return Object.entries(TYPE_DEFINITIONS).map(([value, def]) => (
+    `<option value="${escapeAttr(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(value)}</option>`
+  )).join('');
+}
+
 function renderTextList(title, items, tone = '') {
   const list = normalizeTextList(items);
   if (list.length === 0) return '';
@@ -540,6 +621,93 @@ function formatAmount(amount, unit) {
 function formatNumber(value) {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric.toFixed(1) : '0.0';
+}
+
+async function handleNutritionFeedbackSubmit(form) {
+  const status = document.getElementById('nutrition-feedback-status');
+  const logId = form.dataset.logId;
+  const submitAsEvidence = Boolean(form.elements.submit_as_evidence?.checked);
+  const sourceNote = form.elements.source_note?.value.trim() || '';
+  if (submitAsEvidence && !sourceNote) {
+    if (status) {
+      status.textContent = 'Evidence note is required for review queue.';
+      status.className = 'feedback-status error';
+    }
+    return;
+  }
+
+  const payload = {
+    corrected: {
+      brand: form.elements.brand?.value.trim() || null,
+      name: form.elements.name?.value.trim(),
+      type: form.elements.type?.value,
+      volume: Number(form.elements.volume?.value),
+      caffeine: Number(form.elements.caffeine?.value),
+      sugarContent: Number(form.elements.sugarContent?.value)
+    },
+    source_type: 'user_feedback',
+    source_note: sourceNote,
+    apply_to_log: Boolean(form.elements.apply_to_log?.checked),
+    submit_as_evidence: submitAsEvidence
+  };
+
+  if (status) {
+    status.textContent = 'Submitting...';
+    status.className = 'feedback-status';
+  }
+  form.querySelector('button[type="submit"]')?.setAttribute('disabled', 'true');
+
+  try {
+    const data = await api.submitNutritionFeedbackApi(logId, payload);
+    const updatedLog = data.log;
+    if (payload.apply_to_log) {
+      const dbLogs = await api.fetchLogsApi();
+      state.logs = dbLogs || [];
+      saveLogs(state.logs);
+      renderApp();
+    }
+    state.lastNutritionResult = buildNutritionResultFromLog(updatedLog, data.evidence ? 'Feedback added to review queue' : 'Feedback saved');
+    renderNutritionExplainabilityPanel();
+  } catch (e) {
+    if (status) {
+      status.textContent = e.message || 'Feedback failed';
+      status.className = 'feedback-status error';
+    }
+  } finally {
+    form.querySelector('button[type="submit"]')?.removeAttribute('disabled');
+  }
+}
+
+function buildNutritionResultFromLog(log, notice = '') {
+  return {
+    log_id: log.id,
+    brand: log.brand,
+    name: log.name,
+    type: log.type,
+    volume: log.volume,
+    caffeine: log.caffeine,
+    sugarContent: log.sugarContent,
+    confidence: log.confidence,
+    estimation_method: log.estimation_method || 'Unknown',
+    data_source: log.data_source || 'Unknown',
+    matched_knowledge_id: log.matched_knowledge_id || null,
+    retrieval_score: log.retrieval_score ?? null,
+    reasoning: normalizeTextList(log.reasoning),
+    composition: log.composition || null,
+    explainability: log.explainability || {
+      method: log.estimation_method || 'Unknown',
+      used_composition: false,
+      used_knowledge_match: Boolean(log.matched_knowledge_id),
+      matched_knowledge_id: log.matched_knowledge_id || null,
+      retrieval_score: log.retrieval_score ?? null,
+      confidence: log.confidence ?? 0,
+      reasoning: normalizeTextList(log.reasoning),
+      components: [],
+      assumptions: [],
+      warnings: []
+    },
+    feedback_notice: notice
+  };
 }
 
 // Helper to auto-fill the log form
@@ -1317,7 +1485,16 @@ async function triggerAgentAnalysis(logData) {
   try {
     const data = await api.logDrinkApi(logData);
     if (data.status === 'success') {
-      state.lastNutritionResult = data.nutrition_result || null;
+      state.lastNutritionResult = data.nutrition_result
+        ? {
+            ...data.nutrition_result,
+            log_id: logData.id,
+            brand: logData.brand,
+            name: logData.name,
+            type: logData.type,
+            volume: logData.volume
+          }
+        : null;
       renderNutritionExplainabilityPanel();
       updateAgentUI(data.agent_analysis);
       

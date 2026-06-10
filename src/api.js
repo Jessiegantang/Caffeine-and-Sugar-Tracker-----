@@ -34,6 +34,16 @@ export async function logDrinkApi(logData) {
   return response.json();
 }
 
+export async function submitNutritionFeedbackApi(logId, payload) {
+  const response = await fetch(`${API_BASE}/api/logs/${encodeURIComponent(logId)}/nutrition_feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to submit nutrition feedback'));
+  return response.json();
+}
+
 export async function fetchDailyAgentInsightsApi(date) {
   const response = await fetch(`${API_BASE}/api/agent/daily_insights?date=${date}`);
   if (!response.ok) throw new Error('Failed to fetch daily insights');
