@@ -90,7 +90,7 @@ class NutritionAgentTests(unittest.TestCase):
                 "type": "coffee",
                 "sugar": "none",
                 "volume": 650,
-                "data_source": "鐢ㄦ埛褰曞叆",
+                "data_source": "用户录入",
             }, db)
 
             self.assertTrue(result["estimation_method"].startswith("HYBRID_SQL_EXACT_MATCH"))

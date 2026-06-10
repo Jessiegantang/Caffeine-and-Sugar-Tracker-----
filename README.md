@@ -1,16 +1,33 @@
 # DrinkMind
 
-DrinkMind is a caffeine and sugar tracking app with a FastAPI backend, SQLite drink data, ChromaDB retrieval, and a Vite frontend.
+DrinkMind is a composition-aware nutrition estimation agent for caffeine and
+sugar tracking. It combines natural-language drink parsing, a unified nutrition
+pipeline, trusted knowledge lookup, deterministic Composition Estimation, saved
+explainability, and a human feedback review loop.
 
-## Setup
+## Key Features
 
-1. Install frontend dependencies:
+- Natural-language drink parsing for common drink logging messages.
+- Unified nutrition pipeline used by manual logging and agent-assisted logging.
+- SQL and RAG knowledge priority for reviewed product nutrition data.
+- Composition Estimation fallback for drinks without a trusted exact match.
+- Explainability persistence and replay through `composition_json` and
+  `explainability_json` on `DrinkLog`.
+- Human Feedback Loop for correcting one estimate and optionally submitting it
+  as reviewable evidence.
+- Knowledge Acquisition review flow from `ProductCandidate` and
+  `NutritionEvidence` into `DrinkKnowledge`.
+- Composition eval report and PowerShell quality gate for regression checks.
+
+## How To Run
+
+Install frontend dependencies:
 
 ```bash
 npm install
 ```
 
-2. Install backend dependencies:
+Install backend dependencies:
 
 ```bash
 cd backend
@@ -19,26 +36,23 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Configure backend environment:
+Configure environment variables:
 
 ```bash
 copy backend\.env.example backend\.env
 ```
 
-Then edit `backend\.env` and set your API key. Do not commit `.env`.
+Then edit `backend\.env` and set any API keys you want to use. Do not commit
+`.env`.
 
-## Initialize Knowledge Base
-
-Run this once after installing backend dependencies:
+Initialize the local knowledge base:
 
 ```bash
 cd backend
 python init_rag.py
 ```
 
-This initializes the SQLite tables and synchronizes available drink knowledge into ChromaDB.
-
-## Start Backend
+Start the backend:
 
 ```bash
 cd backend
@@ -47,9 +61,7 @@ uvicorn main:app --reload
 
 The API runs at `http://127.0.0.1:8000`.
 
-## Start Frontend
-
-In another terminal:
+Start the frontend in another terminal:
 
 ```bash
 npm run dev
@@ -57,43 +69,100 @@ npm run dev
 
 The Vite app prints the local URL, usually `http://localhost:5173`.
 
-## One-Command Demo Start
-
-On Windows PowerShell:
+On Windows PowerShell, the demo helper can start both services:
 
 ```powershell
 .\scripts\start_demo.ps1
 ```
 
-This starts the FastAPI backend in the background and then starts the Vite frontend in the current terminal.
+## Quality Gate
 
-## Build Frontend
+Run the full local quality gate from the project root:
 
-```bash
-npm run build
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\quality_gate.ps1
 ```
 
-Generated files in `dist/` are ignored by git.
+The gate runs:
 
-## Run Tests
+- Backend unittest discovery.
+- Composition eval report.
+- Frontend build.
 
-Backend tests use Python's built-in unittest runner:
+## Testing And Eval
 
-```bash
+Run all backend tests:
+
+```powershell
 cd backend
 venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-The tests cover intake parsing, local nutrition fallback, SQL exact-match explainability, agent routing, trace recording, memory preferences, health plans, and API smoke checks.
+Run only the nutrition agent tests:
 
-## Demo Script
+```powershell
+cd backend
+venv\Scripts\python.exe -m unittest tests.test_nutrition_agent
+```
 
-See `docs/demo_script.md` for the interview demo flow:
+Run the Composition Estimation eval:
 
-- Natural language drink logging
-- Asking whether coffee still fits today's budget
-- Creating a 7-day health plan and showing weekly progress
+```powershell
+cd backend
+venv\Scripts\python.exe tests\run_composition_eval_report.py
+```
+
+The eval suite checks deterministic composition behavior, SQL knowledge
+priority, result shape, confidence ranges, and explainability payloads.
+
+## Demo Flow
+
+See `docs/demo_script.md` for a complete executable demo:
+
+1. Start backend and frontend.
+2. Log a coconut latte and show Composition Estimation.
+3. Open the Nutrition Explainability panel.
+4. Replay saved explainability from a historical log.
+5. Submit nutrition feedback.
+6. Review the generated feedback evidence.
+7. Approve evidence into the knowledge base.
+8. Log the same drink again and show `SQL_EXACT_MATCH` priority.
+9. Run the quality gate.
+
+## Project Structure
+
+```text
+backend/
+  main.py                         FastAPI API routes and persistence wiring
+  agent.py                        Legacy enrichment, SQL/RAG lookup, chat helpers
+  database.py                     SQLAlchemy models and lightweight migrations
+  agents/
+    composition_agent.py          Deterministic component-based estimator
+    nutrition_pipeline.py         Stable nutrition estimation contract
+    nutrition_agent.py            Orchestrator-facing nutrition boundary
+    orchestrator.py               LangGraph agent routing
+    knowledge_acquisition_agent.py Candidate/evidence review helpers
+    memory_agent.py               User preference memory
+    risk_agent.py                 Daily caffeine/sugar risk checks
+    health_plan_agent.py          7-day plan generation and progress
+  tests/                          Unit tests and composition eval fixtures
+
+docs/
+  architecture.md                 Current implementation architecture
+  composition_eval.md             Eval design and coverage
+  feedback_loop.md                Human Feedback Loop details
+  demo_script.md                  End-to-end demo flow
+
+src/
+  components/                     Frontend panels and database review UI
+  api.js                          Frontend API client
+
+scripts/
+  quality_gate.ps1                Backend tests, eval report, frontend build
+  start_demo.ps1                  Local demo startup helper
+```
 
 ## Legacy Tools
 
-Historical repair, dump, search, and debug scripts are kept in `tools/legacy/` so the project root stays focused on the app entry points.
+Historical repair, dump, search, and debug scripts are kept in `tools/legacy/`
+so the project root stays focused on the current app entry points.
