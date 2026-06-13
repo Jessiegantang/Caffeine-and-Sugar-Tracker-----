@@ -8,8 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from fastapi.testclient import TestClient
 
 import main
-from agents.nutrition_pipeline import estimate_drink_nutrition
-from database import DrinkKnowledge, DrinkLog, HealthPlan, NutritionEvidence, ProductCandidate, SessionLocal
+from workflows.nutrition_pipeline import estimate_drink_nutrition
+from db.database import DrinkKnowledge, DrinkLog, HealthPlan, NutritionEvidence, ProductCandidate, SessionLocal
 
 
 class ApiTests(unittest.TestCase):

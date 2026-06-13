@@ -1,4 +1,4 @@
-# DrinkMind Demo Script
+﻿# DrinkMind Demo Script
 
 This script uses only currently implemented flows. It is designed for a local
 interview or portfolio demo on Windows PowerShell.
@@ -107,7 +107,7 @@ build_explainability
 ```
 
 `lookup_knowledge` currently reuses `enrich_drink_data`, so SQL/RAG lookup
-behavior is preserved rather than fully split out of `backend/agent.py`.
+behavior is preserved through `backend/knowledge/knowledge_lookup.py`.
 
 ## 4. Replay Saved Explainability From A Historical Log
 

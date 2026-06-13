@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from fastapi.testclient import TestClient
 
 import main
-from agents.knowledge_acquisition_agent import is_allowed_source
-from database import DrinkKnowledge, NutritionEvidence, ProductCandidate, SessionLocal
+from knowledge.knowledge_acquisition_agent import is_allowed_source
+from db.database import DrinkKnowledge, NutritionEvidence, ProductCandidate, SessionLocal
 
 
 class KnowledgeAcquisitionAgentTests(unittest.TestCase):

@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from .nutrition_pipeline import estimate_drink_nutrition
+from workflows.nutrition_pipeline import estimate_drink_nutrition
 
 
 def estimate_from_parsed_drink(parsed_drink: dict, date: str, db) -> dict:

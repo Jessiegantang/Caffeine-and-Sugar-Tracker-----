@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from agents.composition_agent import (
+from rules.composition_agent import (
     decompose_drink,
     estimate_composition_nutrition,
     estimate_from_composition,

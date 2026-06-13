@@ -8,7 +8,7 @@ from api.routers.agent import router as agent_router
 from api.routers.health import router as health_router
 from api.routers.knowledge import router as knowledge_router
 from api.routers.logs import router as logs_router
-from database import init_db
+from db.database import init_db
 
 
 app = FastAPI(title="DrinkMind Agent API")

@@ -6,13 +6,13 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from database import ChatLog, DrinkLog, SleepRecord
+from db.database import ChatLog, DrinkLog, SleepRecord
 from .companion_agent import generate_companion_response
 from .health_plan_agent import build_plan_days, infer_plan_target
 from .intake_parser import parse_intake
 from .memory_agent import extract_memory_updates, read_user_memory
 from .nutrition_agent import estimate_from_parsed_drink
-from .risk_agent import evaluate_daily_risk
+from rules.risk_agent import evaluate_daily_risk
 
 
 class DrinkMindAgentState(TypedDict, total=False):

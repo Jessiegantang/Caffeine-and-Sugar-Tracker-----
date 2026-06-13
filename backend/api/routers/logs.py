@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api.schemas import DrinkInput, NutritionFeedbackInput, SleepInput
-from database import get_db
+from db.database import get_db
 from services import drink_log_service, nutrition_feedback_service
 
 

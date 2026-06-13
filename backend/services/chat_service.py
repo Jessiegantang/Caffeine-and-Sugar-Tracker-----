@@ -4,7 +4,7 @@ import uuid
 from agents.companion_agent import generate_companion_response
 from agents.intake_parser import parse_intake_message
 from agents.memory_agent import apply_memory_updates, extract_memory_updates
-from database import ChatLog, DrinkLog, SleepRecord
+from db.database import ChatLog, DrinkLog, SleepRecord
 from services.trace_service import save_agent_trace
 
 
@@ -26,7 +26,7 @@ def build_companion_context(db, date: str) -> dict:
     sleep_hours = sleep_record.sleep_hours if sleep_record else "未知"
 
     # 获取偏好记忆
-    from database import UserPreference
+    from db.database import UserPreference
     prefs_db = db.query(UserPreference).all()
     preferences = {p.key: p.value for p in prefs_db}
 

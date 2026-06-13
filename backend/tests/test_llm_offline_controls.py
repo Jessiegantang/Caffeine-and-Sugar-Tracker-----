@@ -5,13 +5,13 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import agent
 from agents import companion_agent
 from agents import intake_parser
 from agents import llm_config
 from agents import report_agent
-from agents.nutrition_pipeline import estimate_drink_nutrition
-from database import SessionLocal
+import knowledge.knowledge_lookup as knowledge_lookup
+from workflows.nutrition_pipeline import estimate_drink_nutrition
+from db.database import SessionLocal
 from langchain_core.runnables import RunnableLambda
 
 
@@ -29,7 +29,7 @@ class FakeStructuredLLM:
 
     def with_structured_output(self, *args, **kwargs):
         self.called = True
-        return RunnableLambda(lambda _: agent.IntakeParseResult(
+        return RunnableLambda(lambda _: intake_parser.IntakeParseResult(
             intent="log_drink",
             brand="FakeBrand",
             name="Fake Latte",
@@ -59,7 +59,7 @@ def incomplete_local_parse():
 
 
 class LLMOfflineControlTests(unittest.TestCase):
-    def test_llm_enabled_rules_match_legacy_agent_wrapper(self):
+    def test_llm_enabled_rules(self):
         cases = [
             (
                 {
@@ -107,7 +107,6 @@ class LLMOfflineControlTests(unittest.TestCase):
             with self.subTest(env=env):
                 with patch.dict(os.environ, env, clear=False):
                     self.assertEqual(llm_config.llm_enabled(), expected)
-                    self.assertEqual(agent._llm_enabled(), expected)
 
     def test_parse_intake_does_not_call_structured_llm_when_disabled(self):
         with patch.dict(os.environ, {
@@ -117,7 +116,7 @@ class LLMOfflineControlTests(unittest.TestCase):
         }):
             with patch.object(intake_parser, "llm", RaisingLLM()):
                 with patch.object(intake_parser, "_parse_intake_locally", return_value=incomplete_local_parse()):
-                    result = agent.parse_intake_message("fake drink")
+                    result = intake_parser.parse_intake_message("fake drink")
 
         self.assertEqual(result["missing_fields"], ["sugar"])
         self.assertEqual(result["follow_up"], "Which sugar level?")
@@ -131,7 +130,6 @@ class LLMOfflineControlTests(unittest.TestCase):
         }):
             with patch.object(report_agent, "llm", RaisingLLM()):
                 self.assertEqual(report_agent.generate_health_report(logs, "daily"), {"insights": []})
-                self.assertEqual(agent.generate_health_report(logs, "daily"), {"insights": []})
 
     def test_companion_agent_returns_fallback_without_llm_when_disabled(self):
         with patch.dict(os.environ, {
@@ -142,7 +140,6 @@ class LLMOfflineControlTests(unittest.TestCase):
             with patch.object(companion_agent, "llm", RaisingLLM()):
                 expected = "LLM companion is disabled in the current environment."
                 self.assertEqual(companion_agent.generate_companion_response("hi", [], {}), expected)
-                self.assertEqual(agent.generate_companion_response("hi", [], {}), expected)
 
     def test_enrich_no_knowledge_match_is_quiet_and_uses_local_fallback_when_disabled(self):
         db = SessionLocal()
@@ -152,10 +149,10 @@ class LLMOfflineControlTests(unittest.TestCase):
                 "DRINKMIND_OFFLINE": "true",
                 "OPENAI_API_KEY": "real-looking-key",
             }):
-                with patch.object(agent, "llm", RaisingLLM()):
-                    with patch.object(agent, "vectorstore", None):
+                with patch.object(knowledge_lookup, "llm", RaisingLLM()):
+                    with patch.object(knowledge_lookup, "vectorstore", None):
                         with patch("builtins.print") as mocked_print:
-                            result = agent.enrich_drink_data({
+                            result = knowledge_lookup.enrich_drink_data({
                                 "brand": "NoKbOfflineBrand",
                                 "name": "Offline Test Latte",
                                 "type": "coffee",
@@ -180,8 +177,8 @@ class LLMOfflineControlTests(unittest.TestCase):
                 "DRINKMIND_OFFLINE": "true",
                 "OPENAI_API_KEY": "real-looking-key",
             }):
-                with patch.object(agent, "llm", RaisingLLM()):
-                    with patch.object(agent, "vectorstore", None):
+                with patch.object(knowledge_lookup, "llm", RaisingLLM()):
+                    with patch.object(knowledge_lookup, "vectorstore", None):
                         result = estimate_drink_nutrition({
                             "brand": "NoKbCompositionOfflineBrand",
                             "name": "coconut latte",
@@ -206,7 +203,7 @@ class LLMOfflineControlTests(unittest.TestCase):
         }):
             with patch.object(intake_parser, "llm", fake_llm):
                 with patch.object(intake_parser, "_parse_intake_locally", return_value=incomplete_local_parse()):
-                    result = agent.parse_intake_message("fake drink")
+                    result = intake_parser.parse_intake_message("fake drink")
 
         self.assertTrue(fake_llm.called)
         self.assertEqual(result["sugar"], "half")

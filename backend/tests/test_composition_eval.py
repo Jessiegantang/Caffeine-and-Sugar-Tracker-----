@@ -6,9 +6,10 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import agent as legacy_agent
-from agents.nutrition_pipeline import estimate_drink_nutrition
-from database import DrinkKnowledge, SessionLocal
+import knowledge.knowledge_lookup as knowledge_lookup
+import knowledge.rag_store as rag_store
+from workflows.nutrition_pipeline import estimate_drink_nutrition
+from db.database import DrinkKnowledge, SessionLocal
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "composition_eval_cases.json"
@@ -22,20 +23,20 @@ class DisabledLLM:
 class CompositionEvalTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.original_vectorstore = legacy_agent.vectorstore
-        cls.original_retriever = legacy_agent.retriever
-        cls.original_llm = legacy_agent.llm
-        legacy_agent.vectorstore = None
-        legacy_agent.retriever = None
-        legacy_agent.llm = DisabledLLM()
+        cls.original_lookup_vectorstore = knowledge_lookup.vectorstore
+        cls.original_rag_retriever = rag_store.retriever
+        cls.original_llm = knowledge_lookup.llm
+        knowledge_lookup.vectorstore = None
+        rag_store.retriever = None
+        knowledge_lookup.llm = DisabledLLM()
         with FIXTURE_PATH.open("r", encoding="utf-8") as f:
             cls.cases = json.load(f)
 
     @classmethod
     def tearDownClass(cls):
-        legacy_agent.vectorstore = cls.original_vectorstore
-        legacy_agent.retriever = cls.original_retriever
-        legacy_agent.llm = cls.original_llm
+        knowledge_lookup.vectorstore = cls.original_lookup_vectorstore
+        rag_store.retriever = cls.original_rag_retriever
+        knowledge_lookup.llm = cls.original_llm
 
     def tearDown(self):
         db = SessionLocal()

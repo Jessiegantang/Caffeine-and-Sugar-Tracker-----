@@ -16,9 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import agent as legacy_agent
-from agents.nutrition_pipeline import estimate_drink_nutrition
-from database import DrinkKnowledge, SessionLocal
+import knowledge.knowledge_lookup as knowledge_lookup
+import knowledge.rag_store as rag_store
+from workflows.nutrition_pipeline import estimate_drink_nutrition
+from db.database import DrinkKnowledge, SessionLocal
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -107,12 +108,12 @@ def evaluate_case(case: dict) -> dict:
 
 def run_report() -> dict:
     cases = load_cases()
-    original_vectorstore = legacy_agent.vectorstore
-    original_retriever = legacy_agent.retriever
-    original_llm = legacy_agent.llm
-    legacy_agent.vectorstore = None
-    legacy_agent.retriever = None
-    legacy_agent.llm = DisabledLLM()
+    original_lookup_vectorstore = knowledge_lookup.vectorstore
+    original_rag_retriever = rag_store.retriever
+    original_llm = knowledge_lookup.llm
+    knowledge_lookup.vectorstore = None
+    rag_store.retriever = None
+    knowledge_lookup.llm = DisabledLLM()
 
     try:
         rows = [evaluate_case(case) for case in cases]
@@ -122,9 +123,9 @@ def run_report() -> dict:
             cleanup_knowledge(db, cases)
         finally:
             db.close()
-        legacy_agent.vectorstore = original_vectorstore
-        legacy_agent.retriever = original_retriever
-        legacy_agent.llm = original_llm
+        knowledge_lookup.vectorstore = original_lookup_vectorstore
+        rag_store.retriever = original_rag_retriever
+        knowledge_lookup.llm = original_llm
 
     summary = {
         "total": len(rows),

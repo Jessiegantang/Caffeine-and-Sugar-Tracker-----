@@ -2,8 +2,8 @@ import datetime
 
 from fastapi import HTTPException
 
-from agents.rag_store import delete_chroma_document, sync_chroma_document
-from database import DrinkKnowledge
+from knowledge.rag_store import delete_chroma_document, sync_chroma_document
+from db.database import DrinkKnowledge
 
 
 def serialize_knowledge(row: DrinkKnowledge) -> dict:

@@ -2,7 +2,7 @@ import datetime
 import json
 from collections import Counter
 
-from database import DrinkLog, UserPreference
+from db.database import DrinkLog, UserPreference
 
 
 def read_user_memory(db) -> dict:

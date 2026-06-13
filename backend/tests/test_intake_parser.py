@@ -4,9 +4,9 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from agent import parse_intake_message
+from agents.intake_parser import parse_intake_message
 from agents.orchestrator import run_agent_orchestrator
-from database import SessionLocal
+from db.database import SessionLocal
 
 
 class IntakeParserTests(unittest.TestCase):

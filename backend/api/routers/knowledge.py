@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from api.schemas import BulkIdsInput, CandidateInput, EvidenceInput, ImageImportInput, KnowledgeInput
-from database import get_db
+from db.database import get_db
 from services import knowledge_acquisition_service, knowledge_service
 
 

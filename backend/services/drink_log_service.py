@@ -2,8 +2,8 @@ import datetime
 import json
 from typing import Any, Dict, List
 
-from agents.nutrition_pipeline import estimate_drink_nutrition
-from database import ChatLog, DrinkLog, SleepRecord
+from workflows.nutrition_pipeline import estimate_drink_nutrition
+from db.database import ChatLog, DrinkLog, SleepRecord
 
 
 def safe_json_loads(value: str | None, default=None):

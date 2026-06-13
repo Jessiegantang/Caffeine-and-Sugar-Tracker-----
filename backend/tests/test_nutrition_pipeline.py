@@ -4,8 +4,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from agents.nutrition_pipeline import estimate_drink_nutrition
-from database import DrinkKnowledge, SessionLocal
+from workflows.nutrition_pipeline import estimate_drink_nutrition
+from db.database import DrinkKnowledge, SessionLocal
 
 
 class NutritionPipelineTests(unittest.TestCase):

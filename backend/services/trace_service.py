@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 
-from database import AgentTrace
+from db.database import AgentTrace
 
 
 def save_agent_trace(db: Session, trace_state: Dict[str, Any]) -> None:

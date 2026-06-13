@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from api.schemas import AgentActInput, ChatInput, IntakeParseInput
-from database import get_db
+from db.database import get_db
 from services import agent_action_service, chat_service, user_preference_service
 from services.trace_service import list_agent_traces
 

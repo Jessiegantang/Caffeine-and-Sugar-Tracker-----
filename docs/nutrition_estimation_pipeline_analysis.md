@@ -1,8 +1,8 @@
-# Nutrition Estimation Pipeline 分析
+﻿# Nutrition Estimation Pipeline 分析
 
 日期：2026-06-09
 
-范围：`backend/agent.py`、`backend/agents/nutrition_agent.py`、`backend/agents/orchestrator.py`、`backend/database.py`、`backend/tests`。
+范围：旧 `agent.py`（已删除后的能力归属）、`backend/agents/nutrition_agent.py`、`backend/agents/orchestrator.py`、`backend/db/database.py`、`backend/tests`。
 
 ## 总结
 
@@ -123,7 +123,7 @@ flowchart TD
 
 代码：
 
-- `backend/agent.py`：`parse_intake_message`、`_parse_intake_locally`。
+- `backend/agents/intake_parser.py`：`parse_intake_message`、`_parse_intake_locally`。
 - `backend/agents/intake_parser.py`：薄 wrapper。
 
 输入：
@@ -181,8 +181,8 @@ flowchart TD
 
 代码：
 
-- `backend/agent.py`：`_find_sql_knowledge_match`、`_normalize_match_name`、`_brand_key`、`_knowledge_scope`、`_apply_hybrid_knowledge_result`。
-- 数据模型：`backend/database.py` 的 `DrinkKnowledge`。
+- `backend/knowledge/knowledge_lookup.py`：`_find_sql_knowledge_match`、`_normalize_match_name`、`_brand_key`、`_knowledge_scope`、`_apply_hybrid_knowledge_result`。
+- 数据模型：`backend/db/database.py` 的 `DrinkKnowledge`。
 
 输入：
 
@@ -221,7 +221,8 @@ flowchart TD
 
 代码：
 
-- `backend/agent.py`：模块级 Chroma 初始化、`sync_chroma_document`、`delete_chroma_document`、`enrich_drink_data` 内部 RAG 分支。
+- `backend/knowledge/rag_store.py`：模块级 Chroma 初始化、`sync_chroma_document`、`delete_chroma_document`。
+- `backend/knowledge/knowledge_lookup.py`：`enrich_drink_data` 内部 RAG 分支。
 - 数据同步入口：`backend/main.py` 的 knowledge-base 和 knowledge-acquisition approve endpoints。
 
 输入：
@@ -255,8 +256,8 @@ flowchart TD
 
 代码：
 
-- `backend/agent.py`：`_estimate_nutrition_with_fallback`，用于 hybrid 缺失字段。
-- `backend/agent.py`：`enrich_drink_data` 中直接 LLM zero-shot 分支。
+- `backend/knowledge/knowledge_lookup.py`：`_estimate_nutrition_with_fallback`，用于 hybrid 缺失字段。
+- `backend/knowledge/knowledge_lookup.py`：`enrich_drink_data` 中直接 LLM zero-shot 分支。
 
 输入：
 
@@ -280,7 +281,7 @@ flowchart TD
 
 代码：
 
-- `backend/local_estimator.py`：`estimate_nutrition`。
+- `backend/rules/local_estimator.py`：`estimate_nutrition`。
 
 输入：
 
@@ -566,7 +567,7 @@ Input drink
 
 文件：
 
-- 新增 `backend/agents/composition_agent.py`。
+- 新增 `backend/rules/composition_agent.py`。
 - 新增 `backend/tests/test_composition_agent.py`。
 - 轻量更新 `backend/agents/nutrition_agent.py`，让它调用 composition，或调用共享 estimator service。
 
@@ -580,8 +581,8 @@ Input drink
 
 文件：
 
-- `backend/agent.py`
-- 可能新增 `backend/agents/nutrition_pipeline.py` 或 `backend/services/nutrition_pipeline.py`
+- 旧 `agent.py` 已删除，相关能力已迁到 `backend/agents`、`backend/knowledge`、`backend/rules`
+- 可能新增 `backend/workflows/nutrition_pipeline.py` 或 `backend/services/nutrition_pipeline.py`
 
 行为：
 
@@ -593,7 +594,7 @@ Input drink
 
 文件：
 
-- `backend/database.py`
+- `backend/db/database.py`
 - `backend/main.py`
 - `backend/tests/test_api.py` 和 nutrition/composition tests
 
@@ -607,7 +608,7 @@ Input drink
 
 文件：
 
-- `backend/agent.py` 的 Chroma sync 和 retrieval 逻辑。
+- `backend/knowledge/rag_store.py` 和 `backend/knowledge/knowledge_lookup.py` 的 Chroma sync 和 retrieval 逻辑。
 - Knowledge acquisition tests。
 
 行为：
@@ -618,7 +619,7 @@ Input drink
 
 ## 建议下一步修改的文件
 
-1. `backend/agents/composition_agent.py`
+1. `backend/rules/composition_agent.py`
 
 新增结构化 estimator。第一版先做 deterministic component rules，LLM 后续再接 typed schema。
 
@@ -637,11 +638,11 @@ Input drink
 
 把这里作为 nutrition estimation 的主公共边界。保持输出与当前 orchestrator tests 兼容。
 
-4. `backend/agent.py`
+4. 旧 `agent.py` 已删除；对应逻辑见 `backend/knowledge`、`backend/rules`、`backend/agents/intake_parser.py`
 
 等 composition tests 稳定后再重构。保留 `enrich_drink_data` 作为 wrapper，避免破坏手动记录和现有测试。
 
-5. `backend/database.py`
+5. `backend/db/database.py`
 
 后续增加 structured composition 存储字段，或正式规范 `reasoning` JSON 编码。
 
@@ -664,4 +665,3 @@ Input drink
 - `unknown` 糖在 SQL/RAG 中接近全糖，在 local fallback 中接近半糖。
 - `/api/chat` 可以解析完整饮品，但不估算营养。
 - Nutrition 逻辑集中在 `agent.py`，后续改动风险较高。
-

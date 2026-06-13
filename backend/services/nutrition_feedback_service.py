@@ -4,13 +4,13 @@ from typing import Any, Dict
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from agents.knowledge_acquisition_agent import (
+from knowledge.knowledge_acquisition_agent import (
     add_nutrition_evidence,
     create_manual_candidate,
     serialize_candidate,
     serialize_evidence,
 )
-from database import DrinkLog, ProductCandidate
+from db.database import DrinkLog, ProductCandidate
 from services.drink_log_service import safe_json_loads, serialize_drink_log
 
 

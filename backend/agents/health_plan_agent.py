@@ -2,7 +2,7 @@ import datetime
 import json
 import uuid
 
-from database import DrinkLog, HealthPlan
+from db.database import DrinkLog, HealthPlan
 
 
 def infer_plan_target(user_message: str) -> str:

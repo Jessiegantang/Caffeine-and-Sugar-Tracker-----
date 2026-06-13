@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 
-from agents.knowledge_acquisition_agent import (
+from knowledge.knowledge_acquisition_agent import (
     add_nutrition_evidence,
     analyze_image_with_vision,
     approve_evidence_to_knowledge,
@@ -10,7 +10,7 @@ from agents.knowledge_acquisition_agent import (
     serialize_evidence,
     stage_image_items,
 )
-from database import NutritionEvidence, ProductCandidate
+from db.database import NutritionEvidence, ProductCandidate
 from services.knowledge_service import serialize_knowledge, sync_approved_knowledge
 
 

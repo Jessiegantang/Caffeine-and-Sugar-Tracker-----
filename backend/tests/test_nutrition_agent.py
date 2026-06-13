@@ -4,12 +4,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from agent import enrich_drink_data
 from agents.health_plan_agent import build_plan_days, infer_plan_target
 from agents.nutrition_agent import estimate_from_parsed_drink
 from agents.orchestrator import run_agent_orchestrator
-from database import DrinkKnowledge, SessionLocal
-from local_estimator import estimate_nutrition
+from db.database import DrinkKnowledge, SessionLocal
+from knowledge.knowledge_lookup import enrich_drink_data
+from rules.local_estimator import estimate_nutrition
 
 
 class NutritionAgentTests(unittest.TestCase):

@@ -1,4 +1,4 @@
-# DrinkMind
+﻿# DrinkMind
 
 DrinkMind is a composition-aware nutrition estimation agent for caffeine and
 sugar tracking. It combines natural-language drink parsing, a unified nutrition
@@ -56,7 +56,7 @@ Initialize the local knowledge base:
 
 ```bash
 cd backend
-python init_rag.py
+python -m scripts.init_rag
 ```
 
 Start the backend:
@@ -126,7 +126,7 @@ explainability payloads.
 ## Nutrition Workflow
 
 Nutrition estimation is now an explicit LangGraph `StateGraph` inside
-`backend/agents/nutrition_pipeline.py`. The public contract remains
+`backend/workflows/nutrition_pipeline.py`. The public contract remains
 `estimate_drink_nutrition(drink, db)`, and both `/api/log_drink` and
 `/api/agent/act` enter the same workflow through that function.
 
@@ -156,8 +156,8 @@ composition_decompose -> composition_estimate -> verify_result ->
 build_explainability
 ```
 
-`lookup_knowledge` currently reuses `enrich_drink_data`; SQL/RAG internals have
-not been fully split out of `backend/agent.py`. For demos and debugging, the
+`lookup_knowledge` uses `knowledge.knowledge_lookup.enrich_drink_data`; SQL/RAG
+internals now live under `backend/knowledge`. For demos and debugging, the
 result explainability includes `explainability.graph_trace` and
 `explainability.verification`.
 
@@ -191,19 +191,20 @@ See `docs/demo_script.md` for a complete executable demo:
 
 ```text
 backend/
-  main.py                         FastAPI API routes and persistence wiring
-  agent.py                        Legacy enrichment, SQL/RAG lookup, chat helpers
-  database.py                     SQLAlchemy models and lightweight migrations
+  main.py                         FastAPI app bootstrap and router registration
+  api/                            API schemas and routers
+  services/                       Business services called by routers
+  db/
+    database.py                   SQLAlchemy models, session, and lightweight migrations
   agents/
-    composition_agent.py          Deterministic component-based estimator
-    ingredient_rules.py           Ingredient-level range rules and helpers
-    nutrition_pipeline.py         LangGraph nutrition workflow and stable contract
     nutrition_agent.py            Orchestrator-facing nutrition boundary
     orchestrator.py               LangGraph agent routing
-    knowledge_acquisition_agent.py Candidate/evidence review helpers
     memory_agent.py               User preference memory
-    risk_agent.py                 Daily caffeine/sugar risk checks
     health_plan_agent.py          7-day plan generation and progress
+  rules/                          Deterministic nutrition and risk rules
+  knowledge/                      Knowledge lookup, Chroma/RAG, and acquisition
+  workflows/                      LangGraph workflows
+  scripts/                        Backend maintenance scripts
   tests/                          Unit tests and composition eval fixtures
 
 docs/
@@ -220,8 +221,3 @@ scripts/
   quality_gate.ps1                Backend tests, eval report, frontend build
   start_demo.ps1                  Local demo startup helper
 ```
-
-## Legacy Tools
-
-Historical repair, dump, search, and debug scripts are kept in `tools/legacy/`
-so the project root stays focused on the current app entry points.

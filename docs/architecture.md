@@ -1,4 +1,4 @@
-# DrinkMind Architecture
+﻿# DrinkMind Architecture
 
 This document describes the current DrinkMind implementation. It focuses on the
 real data paths in the app: manual drink logging, agent-assisted draft logging,
@@ -24,7 +24,7 @@ flowchart LR
     Orchestrator --> Memory["Memory Agent"]
     Orchestrator --> Plan["Health Plan Agent"]
 
-    ManualLog --> Pipeline["estimate_drink_nutrition<br/>backend/agents/nutrition_pipeline.py"]
+    ManualLog --> Pipeline["estimate_drink_nutrition<br/>backend/workflows/nutrition_pipeline.py"]
     NutritionAgent --> Pipeline
 
     Pipeline --> Graph["LangGraph Nutrition StateGraph"]
@@ -57,7 +57,7 @@ flowchart LR
 ## 2. Nutrition Pipeline Contract
 
 The shared entry point is `estimate_drink_nutrition(drink, db)` in
-`backend/agents/nutrition_pipeline.py`.
+`backend/workflows/nutrition_pipeline.py`.
 
 Nutrition estimation is implemented as an explicit LangGraph `StateGraph`. The
 external contract remains `estimate_drink_nutrition(drink, db)`, so manual
@@ -76,8 +76,8 @@ Graph nodes:
 - `build_explainability`
 
 `lookup_knowledge` currently reuses the existing `enrich_drink_data` function.
-This preserves the current SQL/RAG behavior; SQL/RAG internals have not been
-fully split out of `backend/agent.py`.
+This preserves the current SQL/RAG behavior; SQL/RAG internals now live under
+`backend/knowledge`.
 
 Knowledge path:
 
@@ -114,7 +114,7 @@ Current priority:
 The Composition Estimation Agent is deterministic. It estimates drink
 components such as espresso, milk base, tea base, fruit base, and syrup, then
 builds component-level reasoning, warnings, and uncertainty drivers. Ingredient
-rules live in `backend/agents/ingredient_rules.py` and provide likely ranges
+rules live in `backend/rules/ingredient_rules.py` and provide likely ranges
 for caffeine and sugar contributors.
 
 Composition results remain backward compatible: `caffeine` and `sugarContent`
