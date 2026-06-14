@@ -122,12 +122,6 @@ export async function clearUserPreferencesApi() {
   return response.json();
 }
 
-export async function fetchAgentTracesApi(limit = 5) {
-  const response = await fetch(`${API_BASE}/api/agent/traces?limit=${limit}`);
-  if (!response.ok) throw new Error('Failed to fetch agent traces');
-  return response.json();
-}
-
 export async function fetchKnowledgeCandidatesApi(status = '') {
   const query = status ? `?status=${encodeURIComponent(status)}` : '';
   const response = await fetch(`${API_BASE}/api/knowledge/acquisition/candidates${query}`);

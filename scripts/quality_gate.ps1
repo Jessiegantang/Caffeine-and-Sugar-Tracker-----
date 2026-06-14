@@ -34,6 +34,16 @@ function Invoke-Step {
 }
 
 try {
+    Invoke-Step "0. Init temp database schema" {
+        Push-Location $BackendDir
+        try {
+            & ".\venv\Scripts\python.exe" -c "from db.database import Base, engine; Base.metadata.create_all(bind=engine)"
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
     Invoke-Step "1. Backend unittest" {
         Push-Location $BackendDir
         try {
@@ -54,7 +64,17 @@ try {
         }
     }
 
-    Invoke-Step "3. Frontend build" {
+    Invoke-Step "3. Agent effect eval report" {
+        Push-Location $BackendDir
+        try {
+            & ".\venv\Scripts\python.exe" "tests\run_agent_effect_eval_report.py"
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    Invoke-Step "4. Frontend build" {
         Push-Location $RootDir
         try {
             & npm.cmd run build -- --outDir $TempDistDir

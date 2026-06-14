@@ -106,6 +106,7 @@ The gate runs:
 
 - Backend unittest discovery.
 - Composition eval report.
+- Agent effect eval report.
 - Frontend build.
 
 ## Testing And Eval
@@ -134,6 +135,19 @@ venv\Scripts\python.exe tests\run_composition_eval_report.py
 The eval suite checks deterministic composition behavior, SQL knowledge
 priority, result shape, confidence ranges, component-level range fields, and
 explainability payloads.
+
+Run the Agent Effect eval:
+
+```powershell
+cd backend
+venv\Scripts\python.exe tests\run_agent_effect_eval_report.py
+```
+
+The Agent Effect eval runs fixed user messages through the orchestrator in
+offline mode. It checks intent/action selection, risk judgment, required and
+forbidden tools, evidence references, structured nutrition trace shape, memory
+updates, response snippets, and deterministic offline stability. Use
+`--write-doc` to write `docs/agent_effect_eval_report.md`.
 
 ## Nutrition Workflow
 

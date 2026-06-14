@@ -1,0 +1,345 @@
+[
+  {
+    "id": "advice_low_budget",
+    "message": "我现在还能喝咖啡吗",
+    "date": "2026-07-01",
+    "expected": {
+      "intent": "ask_advice",
+      "final_action": "answer_advice",
+      "risk_level": "low",
+      "required_tools": ["risk_rules", "memory_read", "LOCAL_ADVICE"],
+      "forbidden_tools": ["LLM_CHAT"],
+      "response_contains": ["可控"]
+    }
+  },
+  {
+    "id": "advice_medium_budget",
+    "message": "下午还能喝奶茶吗",
+    "date": "2026-07-02",
+    "prior_logs": [
+      {
+        "id": "eval_medium_existing",
+        "brand": "Existing",
+        "name": "Morning Latte",
+        "type": "coffee",
+        "sugar": "half",
+        "volume": 500,
+        "caffeine": 220,
+        "sugarContent": 12
+      }
+    ],
+    "expected": {
+      "intent": "ask_advice",
+      "final_action": "answer_advice",
+      "risk_level": "medium",
+      "required_tools": ["risk_rules", "memory_read", "LOCAL_ADVICE"],
+      "forbidden_tools": ["LLM_CHAT"],
+      "response_contains": ["一点空间", "低糖"]
+    }
+  },
+  {
+    "id": "advice_high_caffeine_budget",
+    "message": "今天饮品预算还安全吗",
+    "date": "2026-07-03",
+    "prior_logs": [
+      {
+        "id": "eval_high_caffeine_existing",
+        "brand": "Existing",
+        "name": "Strong Coffee",
+        "type": "coffee",
+        "sugar": "none",
+        "volume": 500,
+        "caffeine": 430,
+        "sugarContent": 2
+      }
+    ],
+    "expected": {
+      "intent": "ask_advice",
+      "final_action": "answer_advice",
+      "risk_level": "high",
+      "required_tools": ["risk_rules", "memory_read", "LOCAL_ADVICE"],
+      "forbidden_tools": ["LLM_CHAT"],
+      "response_contains": ["暂时不要"]
+    }
+  },
+  {
+    "id": "advice_high_sugar_budget",
+    "message": "今天糖分预算还安全吗",
+    "date": "2026-07-04",
+    "prior_logs": [
+      {
+        "id": "eval_high_sugar_existing",
+        "brand": "Existing",
+        "name": "Sweet Tea",
+        "type": "milktea",
+        "sugar": "full",
+        "volume": 700,
+        "caffeine": 80,
+        "sugarContent": 55
+      }
+    ],
+    "expected": {
+      "intent": "ask_advice",
+      "final_action": "answer_advice",
+      "risk_level": "high",
+      "required_tools": ["risk_rules", "memory_read", "LOCAL_ADVICE"],
+      "forbidden_tools": ["LLM_CHAT"],
+      "response_contains": ["暂时不要"]
+    }
+  },
+  {
+    "id": "log_luckin_coconut_latte",
+    "message": "我刚喝了一杯瑞幸生椰拿铁，大杯，三分糖。",
+    "date": "2026-07-05",
+    "setup_knowledge": {
+      "id": "eval_kb_luckin_coconut_latte",
+      "brand": "瑞幸咖啡",
+      "name": "生椰拿铁",
+      "type": "coffee",
+      "volume": 500,
+      "caffeine": 126.8,
+      "baseSugar": 31,
+      "source": "eval_fixture",
+      "confidence": 0.96
+    },
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "low",
+      "required_tools": ["nutrition_pipeline", "risk_rules", "memory_update"],
+      "parsed_fields": {"brand": "瑞幸咖啡", "name": "生椰拿铁", "volume": 500, "sugar": "three"},
+      "used_knowledge_match": true,
+      "required_evidence": ["retrieved_docs"],
+      "response_contains": ["已识别", "预计今日风险"]
+    }
+  },
+  {
+    "id": "log_cotti_super_coconut_americano",
+    "message": "记录一杯库迪超燃生椰美式650ml不另外加糖",
+    "date": "2026-07-06",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "medium",
+      "required_tools": ["nutrition_pipeline", "COMPOSITION_ESTIMATION", "risk_rules", "memory_update"],
+      "parsed_fields": {"brand": "库迪咖啡", "name": "超燃生椰美式", "volume": 650, "sugar": "none"},
+      "nutrition_method": "COMPOSITION_ESTIMATION",
+      "used_composition": true,
+      "used_knowledge_match": false,
+      "trace_ids": ["normalize_input", "lookup_knowledge", "route_estimation", "composition_decompose", "composition_estimate", "verify_result", "build_explainability"],
+      "response_contains": ["库迪咖啡", "超燃生椰美式"]
+    }
+  },
+  {
+    "id": "log_starbucks_americano_exact_evidence",
+    "message": "我喝了星巴克美式500ml无糖",
+    "date": "2026-07-07",
+    "setup_knowledge": {
+      "id": "eval_kb_starbucks_americano",
+      "brand": "星巴克",
+      "name": "美式",
+      "type": "coffee",
+      "volume": 500,
+      "caffeine": 210,
+      "baseSugar": 0,
+      "source": "eval_fixture",
+      "confidence": 0.98
+    },
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "medium",
+      "required_tools": ["nutrition_pipeline", "SQL_EXACT_MATCH", "risk_rules", "memory_update"],
+      "parsed_fields": {"brand": "星巴克", "name": "美式", "volume": 500, "sugar": "none"},
+      "nutrition_method": "SQL_EXACT_MATCH",
+      "used_composition": false,
+      "used_knowledge_match": true,
+      "retrieved_docs": ["eval_kb_starbucks_americano"],
+      "response_contains": ["星巴克", "美式"]
+    }
+  },
+  {
+    "id": "followup_missing_sugar",
+    "message": "刚喝了一杯奶茶",
+    "date": "2026-07-08",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "ask_follow_up",
+      "required_missing_fields": ["sugar"],
+      "required_tools": [],
+      "response_contains": ["甜度"]
+    }
+  },
+  {
+    "id": "log_milk_tea_half",
+    "message": "我喝了一杯经典奶茶500ml半糖",
+    "date": "2026-07-09",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "low",
+      "required_tools": ["nutrition_pipeline", "COMPOSITION_ESTIMATION", "risk_rules"],
+      "parsed_fields": {"type": "milktea", "volume": 500, "sugar": "half"},
+      "nutrition_method": "COMPOSITION_ESTIMATION",
+      "used_composition": true
+    }
+  },
+  {
+    "id": "log_fruit_tea_no_sugar",
+    "message": "记录一杯水果茶500ml无糖",
+    "date": "2026-07-10",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "medium",
+      "required_tools": ["nutrition_pipeline", "COMPOSITION_ESTIMATION", "risk_rules"],
+      "parsed_fields": {"type": "fruittea", "volume": 500, "sugar": "none"},
+      "nutrition_method": "COMPOSITION_ESTIMATION",
+      "used_composition": true
+    }
+  },
+  {
+    "id": "log_americano_full_sugar",
+    "message": "记录一杯美式500ml全糖",
+    "date": "2026-07-11",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "low",
+      "required_tools": ["nutrition_pipeline", "COMPOSITION_ESTIMATION", "risk_rules"],
+      "parsed_fields": {"name": "美式", "volume": 500, "sugar": "full"},
+      "nutrition_method": "COMPOSITION_ESTIMATION",
+      "used_composition": true
+    }
+  },
+  {
+    "id": "log_oat_latte_half",
+    "message": "刚喝燕麦拿铁500ml半糖",
+    "date": "2026-07-12",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "low",
+      "required_tools": ["nutrition_pipeline", "COMPOSITION_ESTIMATION", "risk_rules"],
+      "parsed_fields": {"volume": 500, "sugar": "half"},
+      "nutrition_method": "COMPOSITION_ESTIMATION",
+      "used_composition": true
+    }
+  },
+  {
+    "id": "risk_after_existing_medium_plus_drink",
+    "message": "记录一杯美式500ml无糖",
+    "date": "2026-07-13",
+    "prior_logs": [
+      {
+        "id": "eval_prior_medium_plus",
+        "brand": "Existing",
+        "name": "Morning Coffee",
+        "type": "coffee",
+        "sugar": "none",
+        "volume": 500,
+        "caffeine": 190,
+        "sugarContent": 1
+      }
+    ],
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "medium",
+      "required_tools": ["nutrition_pipeline", "risk_rules"],
+      "parsed_fields": {"name": "美式", "volume": 500, "sugar": "none"}
+    }
+  },
+  {
+    "id": "risk_after_existing_high_plus_drink",
+    "message": "记录一杯拿铁500ml半糖",
+    "date": "2026-07-14",
+    "prior_logs": [
+      {
+        "id": "eval_prior_high_plus",
+        "brand": "Existing",
+        "name": "Sweet Coffee",
+        "type": "coffee",
+        "sugar": "half",
+        "volume": 500,
+        "caffeine": 330,
+        "sugarContent": 32
+      }
+    ],
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "risk_level": "high",
+      "required_tools": ["nutrition_pipeline", "risk_rules"],
+      "parsed_fields": {"name": "拿铁", "volume": 500, "sugar": "half"}
+    }
+  },
+  {
+    "id": "memory_reduce_sugar",
+    "message": "我想少喝糖，刚喝了一杯瑞幸生椰拿铁，大杯，三分糖。",
+    "date": "2026-07-15",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "required_memory": {"goal": "reduce_sugar", "preferred_sugar": "three"},
+      "required_tools": ["memory_update", "nutrition_pipeline"]
+    }
+  },
+  {
+    "id": "offline_advice_with_caffeine_preference_text",
+    "message": "我下午三点后不喝咖啡因，现在饮品预算还安全吗",
+    "date": "2026-07-16",
+    "expected": {
+      "intent": "ask_advice",
+      "final_action": "answer_advice",
+      "required_tools": ["risk_rules", "memory_read", "LOCAL_ADVICE"],
+      "forbidden_tools": ["LLM_CHAT"]
+    }
+  },
+  {
+    "id": "offline_no_llm_for_advice",
+    "message": "给我一个今天饮品建议",
+    "date": "2026-07-17",
+    "expected": {
+      "intent": "ask_advice",
+      "final_action": "answer_advice",
+      "required_tools": ["LOCAL_ADVICE"],
+      "forbidden_tools": ["LLM_CHAT"],
+      "offline_stable": true
+    }
+  },
+  {
+    "id": "offline_log_stability",
+    "message": "记录一杯库迪超燃生椰美式650ml不另外加糖",
+    "date": "2026-07-18",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "nutrition_method": "COMPOSITION_ESTIMATION",
+      "offline_stable": true,
+      "trace_ids": ["composition_decompose", "composition_estimate", "verify_result"]
+    }
+  },
+  {
+    "id": "evidence_trace_shape",
+    "message": "记录一杯库迪超燃生椰美式650ml不另外加糖",
+    "date": "2026-07-19",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "fill_log_form",
+      "trace_event_shape": true,
+      "trace_ids": ["normalize_input", "lookup_knowledge", "route_estimation", "build_explainability"]
+    }
+  },
+  {
+    "id": "followup_missing_volume_and_sugar",
+    "message": "刚喝了点东西",
+    "date": "2026-07-20",
+    "expected": {
+      "intent": "log_drink",
+      "final_action": "ask_follow_up",
+      "required_missing_fields": ["volume", "sugar"],
+      "response_contains": ["多少 ml"]
+    }
+  }
+]

@@ -60,7 +60,7 @@
         </svg>
         数据库管理
       </button>
-      <a class="agent-jump-btn agent-jump-btn-muted" href="#agent-workspace">技术详情</a>
+      <a class="agent-jump-btn agent-jump-btn-muted" href="#agent-workspace">估算修正</a>
     </div>
 
     <!-- Main Workspace Layout -->
@@ -409,35 +409,10 @@
                 </div>
               </section>
 
-              <section class="agent-workspace-section card glass" id="agent-workspace">
-                <details class="technical-details-block">
-                  <summary>
-                    <span class="card-title">技术详情 / Agent 诊断</span>
-                    <button type="button" class="agent-small-btn" id="agent-refresh-btn">刷新</button>
-                  </summary>
-
-                  <div class="agent-workspace-grid">
-                  <div class="agent-panel">
-                    <div class="agent-panel-header">
-                      <span>记忆</span>
-                      <button type="button" class="agent-icon-btn" id="memory-clear-btn" title="清空记忆">清空</button>
-                    </div>
-                    <div id="memory-list" class="agent-panel-body muted">暂无记忆</div>
-                  </div>
-
-                  <div class="agent-panel">
-                    <div class="agent-panel-header">
-                      <span>调用轨迹</span>
-                    </div>
-                    <div id="trace-list" class="agent-panel-body muted">暂无调用轨迹</div>
-                  </div>
-
-                  </div>
-                </details>
-
+              <section class="agent-workspace-section card glass estimate-correction-section" id="agent-workspace">
                 <div class="agent-panel nutrition-explainability-panel estimate-result-panel">
                   <div class="agent-panel-header">
-                    <span>估算结果</span>
+                    <span>估算详情与修正</span>
                   </div>
                   <div id="nutrition-explainability-panel" class="agent-panel-body muted">暂无营养估算结果</div>
                 </div>

@@ -59,6 +59,10 @@ SIZE_ALIASES = [
 
 LOG_KEYWORDS = ["\u559d", "\u4e70", "\u6765\u4e00\u676f", "\u8bb0\u5f55", "\u52a0\u4e00\u6761", "\u70b9\u4e86", "\u521a\u521a", "\u521a\u624d"]
 ADVICE_KEYWORDS = ["\u8fd8\u80fd\u559d", "\u5efa\u8bae", "\u63a8\u8350", "\u53ef\u4ee5\u559d", "\u9002\u5408", "\u5065\u5eb7\u5417"]
+SYMPTOM_KEYWORDS = [
+    "\u5e72\u5455", "\u6076\u5fc3", "\u60f3\u5410", "\u53cd\u80c3", "\u80c3\u4e0d\u8212\u670d", "\u80c3\u75bc",
+    "\u5fc3\u614c", "\u5934\u6655", "\u96be\u53d7", "\u4e0d\u8212\u670d", "\u62c9\u809a\u5b50", "\u809a\u5b50\u75bc",
+]
 FILLER_TOKENS = ["\u90a3\u4e2a", "\u8fd9\u4e2a", "\u4e00\u4e2a", "\u7684"]
 DRINK_SUFFIXES = [
     "\u6768\u679d\u7518\u9732", "\u751f\u6930\u62ff\u94c1", "\u6930\u5b50\u62ff\u94c1", "\u62ff\u94c1",
@@ -216,6 +220,8 @@ def _build_follow_up(missing_fields: list[str]) -> str | None:
 def _parse_intake_locally(user_message: str) -> dict:
     text = user_message.strip()
     intent = "log_drink" if any(keyword in text for keyword in LOG_KEYWORDS) else "ask_advice"
+    if any(keyword in text for keyword in SYMPTOM_KEYWORDS) and not any(keyword in text for keyword in ["\u8bb0\u5f55", "\u52a0\u4e00\u6761"]):
+        intent = "ask_advice"
     if intent != "log_drink" and any(keyword in text for keyword in ADVICE_KEYWORDS):
         intent = "ask_advice"
     brand = _infer_brand(text)

@@ -41,6 +41,8 @@ function appendParsedIntake(parsedIntake) {
 
   const missing = parsedIntake.missing_fields || [];
   const canAdd = missing.length === 0;
+  if (!canAdd) return;
+
   const name = parsedIntake.name || parsedIntake.drink_name || parsedIntake.product_name || '-';
   const volume = parsedIntake.volume || parsedIntake.volume_ml || '-';
   const sugar = parsedIntake.sugar || parsedIntake.sugar_level || parsedIntake.sweetness || '-';

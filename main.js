@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupMemoryDebugApi();
   renderHotDrinks();
   renderApp();
-  renderAgentWorkspace();
+  renderNutritionExplainabilityPanel();
 });
 
 function setupMemoryDebugApi() {
@@ -275,71 +275,12 @@ function setupEventListeners() {
       handleNutritionFeedbackSubmit(event.target);
     }
   });
-  document.getElementById('agent-refresh-btn')?.addEventListener('click', renderAgentWorkspace);
-  document.getElementById('memory-clear-btn')?.addEventListener('click', async () => {
-    await api.clearUserPreferencesApi();
-    await renderAgentWorkspace();
-  });
-
 }
 
 // Helper to get HH:MM of now
 function getCurrentTimeString() {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-}
-
-async function renderAgentWorkspace() {
-  await Promise.allSettled([
-    renderMemoryPanel(),
-    renderTracePanel()
-  ]);
-  renderNutritionExplainabilityPanel();
-}
-
-async function renderMemoryPanel() {
-  const panel = document.getElementById('memory-list');
-  if (!panel) return;
-  try {
-    const data = await api.fetchUserPreferencesApi();
-    const entries = Object.entries(data.preferences || {});
-    if (entries.length === 0) {
-      panel.className = 'agent-panel-body muted';
-      panel.textContent = '暂无记忆';
-      return;
-    }
-    panel.className = 'agent-panel-body';
-    panel.innerHTML = entries.map(([key, value]) => `
-      <div class="agent-kv"><span>${escapeHtml(key)}</span><strong>${escapeHtml(Array.isArray(value) ? value.join(', ') : value)}</strong></div>
-    `).join('');
-  } catch (e) {
-    panel.className = 'agent-panel-body muted';
-    panel.textContent = '后端暂不可用';
-  }
-}
-
-async function renderTracePanel() {
-  const panel = document.getElementById('trace-list');
-  if (!panel) return;
-  try {
-    const data = await api.fetchAgentTracesApi(5);
-    const traces = data.traces || [];
-    if (traces.length === 0) {
-      panel.className = 'agent-panel-body muted';
-      panel.textContent = '暂无调用轨迹';
-      return;
-    }
-    panel.className = 'agent-panel-body trace-stack';
-    panel.innerHTML = traces.map(trace => `
-      <div class="trace-row">
-        <div><strong>${escapeHtml(trace.intent || 'unknown')}</strong><span>${escapeHtml(trace.final_action || '')}</span></div>
-        <small>${escapeHtml((trace.agents_called || []).join(' > '))}</small>
-      </div>
-    `).join('');
-  } catch (e) {
-    panel.className = 'agent-panel-body muted';
-    panel.textContent = '后端暂不可用';
-  }
 }
 
 function renderNutritionExplainabilityPanel() {
@@ -492,22 +433,53 @@ function renderNutritionTechnicalDetails(details) {
 }
 
 function renderLangGraphWorkflow(graphTrace, verification) {
-  if (!graphTrace || graphTrace.length === 0) {
+  const events = normalizeAgentTraceEvents(graphTrace);
+  if (events.length === 0) {
     return '';
   }
 
   const warnings = normalizeTextList(verification?.warnings || []);
   const issues = normalizeTextList(verification?.issues || []);
   const passed = verification?.passed;
+  const completedCount = events.filter(event => event.status !== 'error').length;
+  const errorCount = events.filter(event => event.status === 'error').length;
 
   return `
     <div class="nutrition-explain-section langgraph-workflow-section">
-      <div class="nutrition-explain-title">LangGraph 工作流</div>
-      <ol class="langgraph-step-list">
-        ${graphTrace.map((step, index) => `
-          <li class="langgraph-step">
-            <span class="langgraph-step-index">${index + 1}</span>
-            <span class="langgraph-step-name">${escapeHtml(step)}</span>
+      <div class="nutrition-workflow-header">
+        <div>
+          <div class="nutrition-explain-title">Agent Trace 工作流</div>
+          <div class="nutrition-workflow-subtitle">从输入、检索、路由到估算与校验的流程级可视化</div>
+        </div>
+        <div class="nutrition-workflow-stats">
+          <span>${events.length} 步</span>
+          <span>${completedCount} 完成</span>
+          ${errorCount ? `<span class="tone-error">${errorCount} 异常</span>` : ''}
+        </div>
+      </div>
+      <ol class="agent-trace-timeline">
+        ${events.map((event, index) => `
+          <li class="agent-trace-event tone-${escapeAttr(event.status)}">
+            <span class="agent-trace-index">${index + 1}</span>
+            <div class="agent-trace-card">
+              <div class="agent-trace-card-head">
+                <div>
+                  <strong>${escapeHtml(event.label)}</strong>
+                  <span>${escapeHtml(event.agent)}</span>
+                </div>
+                <div class="agent-trace-badges">
+                  <span>${escapeHtml(event.phase)}</span>
+                  <span>${escapeHtml(formatTraceStatus(event.status))}</span>
+                  ${event.confidence !== null && event.confidence !== undefined ? `<span>${formatConfidence(event.confidence)}</span>` : ''}
+                </div>
+              </div>
+              ${event.summary ? `<p>${escapeHtml(event.summary)}</p>` : ''}
+              ${event.decision ? `<div class="agent-trace-decision">${escapeHtml(event.decision)}</div>` : ''}
+              <div class="agent-trace-data-grid">
+                ${renderTraceDataList('输入', event.input)}
+                ${renderTraceDataList('输出', event.output)}
+              </div>
+            </div>
           </li>
         `).join('')}
       </ol>
@@ -524,6 +496,130 @@ function renderLangGraphWorkflow(graphTrace, verification) {
   `;
 }
 
+function normalizeAgentTraceEvents(graphTrace) {
+  return (Array.isArray(graphTrace) ? graphTrace : []).map((event) => {
+    if (typeof event === 'string') {
+      return {
+        id: event,
+        label: getLegacyTraceLabel(event),
+        phase: '流程',
+        agent: 'Nutrition Agent',
+        status: 'completed',
+        summary: '',
+        input: null,
+        output: null,
+        decision: null,
+        confidence: null
+      };
+    }
+    if (!event || typeof event !== 'object') {
+      return {
+        id: '',
+        label: '未知步骤',
+        phase: '流程',
+        agent: 'Nutrition Agent',
+        status: 'completed',
+        summary: '',
+        input: null,
+        output: null,
+        decision: null,
+        confidence: null
+      };
+    }
+    return {
+      id: event.id || event.node || '',
+      label: event.label || getLegacyTraceLabel(event.id || event.node || ''),
+      phase: event.phase || '流程',
+      agent: event.agent || 'Nutrition Agent',
+      status: event.status || 'completed',
+      summary: event.summary || '',
+      input: event.input || null,
+      output: event.output || null,
+      decision: event.decision || null,
+      confidence: event.confidence
+    };
+  });
+}
+
+function getLegacyTraceLabel(id) {
+  const labels = {
+    normalize_input: '标准化输入',
+    lookup_knowledge: '知识库检索',
+    route_estimation: '路由决策',
+    use_knowledge_result: '采用知识结果',
+    composition_decompose: '成分拆解',
+    composition_estimate: '成分估算',
+    composition_error: '成分估算异常',
+    verify_result: '结果校验',
+    build_explainability: '生成解释'
+  };
+  return labels[id] || id || '未知步骤';
+}
+
+function renderTraceDataList(title, data) {
+  if (!data || Object.keys(data).length === 0) return '';
+  return `
+    <div class="agent-trace-data">
+      <span>${escapeHtml(title)}</span>
+      <dl>
+        ${Object.entries(data).map(([key, value]) => `
+          <div>
+            <dt>${escapeHtml(formatTraceKey(key))}</dt>
+            <dd>${escapeHtml(formatTraceValue(value))}</dd>
+          </div>
+        `).join('')}
+      </dl>
+    </div>
+  `;
+}
+
+function formatTraceKey(key) {
+  const labels = {
+    brand: '品牌',
+    name: '名称',
+    type: '类型',
+    volume_ml: '容量',
+    sugar: '甜度',
+    method: '方法',
+    source: '来源',
+    caffeine_mg: '咖啡因',
+    sugar_g: '糖分',
+    confidence: '置信度',
+    matched_knowledge_id: '知识 ID',
+    retrieval_score: '检索分',
+    components: '成分数',
+    route: '路由',
+    drink_type: '饮品类型',
+    espresso_shots: '浓缩份数',
+    tea_base_volume_ml: '茶底',
+    milk_volume_ml: '奶基底',
+    fruit_base_volume_ml: '果汁/饮品基底',
+    syrup_pumps: '糖浆泵数',
+    sweetness_level: '甜度级别',
+    assumptions: '假设',
+    warnings: '提醒',
+    passed: '通过',
+    issues: '问题',
+    error: '错误'
+  };
+  return labels[key] || key;
+}
+
+function formatTraceValue(value) {
+  if (Array.isArray(value)) return value.map(formatTraceValue).join('；');
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  return translateNutritionText(value);
+}
+
+function formatTraceStatus(status) {
+  if (status === 'error') return '异常';
+  if (status === 'warning') return '有提醒';
+  if (status === 'skipped') return '跳过';
+  return '完成';
+}
+
 function formatVerificationPassed(value) {
   if (value === undefined || value === null) return '未知';
   return value ? '是' : '否';
@@ -535,7 +631,7 @@ function renderInlineTextList(label, items, tone = '') {
     <div class="langgraph-verification-list ${tone ? `tone-${tone}` : ''}">
       <span>${escapeHtml(label)}</span>
       <ul>
-        ${values.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+        ${values.map(item => `<li>${escapeHtml(translateNutritionText(item))}</li>`).join('')}
       </ul>
     </div>
   `;
@@ -613,14 +709,14 @@ function renderComponentsTable(components) {
       ${components.map(component => `
         <div class="nutrition-component-row">
           <div>
-            <strong>${escapeHtml(component.name || '成分')}</strong>
-            <span>${escapeHtml(component.category || '未知类别')}</span>
+            <strong>${escapeHtml(translateNutritionTerm(component.name || '成分'))}</strong>
+            <span>${escapeHtml(translateNutritionTerm(component.category || '未知类别'))}</span>
           </div>
           <div>${escapeHtml(formatAmount(component.amount, component.unit))}</div>
           <div>${formatNumber(component.caffeine_mg)}mg</div>
           <div>${formatNumber(component.sugar_g)}g</div>
           <div>${formatConfidence(component.confidence ?? 0)}</div>
-          <small>${escapeHtml(component.basis || '')}</small>
+          <small>${escapeHtml(translateNutritionText(component.basis || ''))}</small>
         </div>
       `).join('')}
     </div>
@@ -688,7 +784,7 @@ function renderNutritionFeedbackForm(result) {
 
 function renderFeedbackTypeOptions(selected) {
   return Object.entries(TYPE_DEFINITIONS).map(([value, def]) => (
-    `<option value="${escapeAttr(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(value)}</option>`
+    `<option value="${escapeAttr(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(getTypeTextCN(value))}</option>`
   )).join('');
 }
 
@@ -699,7 +795,7 @@ function renderTextList(title, items, tone = '') {
     <div class="nutrition-explain-section ${tone ? `tone-${tone}` : ''}">
       <div class="nutrition-explain-title">${escapeHtml(title)}</div>
       <ul class="nutrition-text-list">
-        ${list.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+        ${list.map(item => `<li>${escapeHtml(translateNutritionText(item))}</li>`).join('')}
       </ul>
     </div>
   `;
@@ -1112,6 +1208,126 @@ function translateExplainabilityValue(value) {
   return values[text] || text;
 }
 
+function translateNutritionTerm(value) {
+  const text = String(value ?? '');
+  const terms = {
+    espresso: '浓缩咖啡',
+    coconut_water_base: '椰子水基底',
+    coconut_milk: '厚椰乳',
+    milk: '牛奶',
+    oat_milk: '燕麦奶',
+    black_or_oolong_tea: '红茶/乌龙茶底',
+    light_tea: '轻茶底',
+    fruit_or_juice_base: '果汁/水果基底',
+    generic_beverage_base: '通用饮品基底',
+    added_syrup: '额外糖浆',
+    coffee_base: '咖啡基底',
+    fruit_base: '水果/饮品基底',
+    milk_base: '奶基底',
+    tea_base: '茶基底',
+    sweetener: '甜味来源',
+    coconut_latte: '生椰拿铁',
+    coconut_americano: '生椰美式',
+    americano: '美式咖啡',
+    latte: '拿铁',
+    oat_latte: '燕麦拿铁',
+    milk_tea: '奶茶',
+    fruit_tea: '水果茶',
+    unknown: '未知',
+    none: '无糖',
+    three: '三分糖',
+    half: '半糖',
+    seven: '七分糖',
+    full: '全糖',
+    COMPOSITION_ESTIMATION: '成分拆解估算',
+    SQL_EXACT_MATCH: '知识库精确匹配',
+    RAG_MATCH: '知识库语义匹配',
+    LOCAL_ESTIMATOR: '本地规则估算',
+    LLM_ESTIMATION: '模型估算',
+    'Composition Estimation Agent': '成分估算 Agent',
+    'Knowledge Lookup Agent': '知识库检索 Agent',
+    'Input Normalizer': '输入标准化',
+    'Estimation Router': '估算路由器',
+    'Result Verifier': '结果校验器',
+    'Explainability Builder': '解释生成器'
+  };
+  return terms[text] || text;
+}
+
+function translateNutritionText(value) {
+  const text = String(value ?? '');
+  if (!text) return '';
+
+  const direct = {
+    'Functional or energy-style naming detected; extra caffeine sources are not modeled without product evidence.':
+      '检测到功能型或能量风格命名；在没有可信产品证据时，不额外估算其他咖啡因来源。',
+    'Warning: Functional or energy-style naming detected; extra caffeine sources are not modeled without product evidence.':
+      '提醒：检测到功能型或能量风格命名；在没有可信产品证据时，不额外估算其他咖啡因来源。',
+    'Coconut americano is modeled as espresso plus coconut water or coconut beverage base.':
+      '生椰美式按“浓缩咖啡 + 椰子水或椰子饮品基底”建模。',
+    'No added syrup sugar because sweetness level is none.':
+      '甜度为无糖，因此没有计入额外糖浆糖分。',
+    'composition route produced no components':
+      '成分估算路径没有生成成分明细。',
+    'composition route selected a non-composition method':
+      '成分估算路径选择了非成分估算方法。',
+    'knowledge route selected a composition method':
+      '知识库路径选择了成分估算方法。',
+    'knowledge result should not include composition details':
+      '知识库匹配结果不应包含成分拆解详情。',
+    'composition result should not include matched knowledge id':
+      '成分估算结果不应包含知识库匹配 ID。',
+    'caffeine is negative': '咖啡因数值为负数。',
+    'sugarContent is negative': '糖分数值为负数。',
+    'caffeine exceeds 500mg': '咖啡因超过 500mg。',
+    'sugarContent exceeds 100g': '糖分超过 100g。'
+  };
+  if (direct[text]) return direct[text];
+
+  let match = text.match(/^([\d.]+)-([\d.]+)mg caffeine per espresso shot, best ([\d.]+)mg$/);
+  if (match) {
+    return `每份浓缩咖啡按 ${match[1]}-${match[2]}mg 咖啡因估算，取 ${match[3]}mg。`;
+  }
+
+  match = text.match(/^([\d.]+)-([\d.]+)g sugar per 100ml coconut water or coconut beverage base, best ([\d.]+)g$/);
+  if (match) {
+    return `椰子水或椰子饮品基底按每 100ml ${match[1]}-${match[2]}g 糖估算，取 ${match[3]}g。`;
+  }
+
+  match = text.match(/^([\d.]+)-([\d.]+)g sugar per 100ml (.+), best ([\d.]+)g$/);
+  if (match) {
+    return `${translateNutritionTerm(match[3])} 按每 100ml ${match[1]}-${match[2]}g 糖估算，取 ${match[4]}g。`;
+  }
+
+  match = text.match(/^Estimated espresso caffeine range from ([\d.]+) shot\(s\): ([\d.]+)-([\d.]+)mg, best ([\d.]+)mg\.$/);
+  if (match) {
+    return `按 ${match[1]} 份浓缩咖啡估算咖啡因范围：${match[2]}-${match[3]}mg，取估算值 ${match[4]}mg。`;
+  }
+
+  match = text.match(/^Included natural sugar range from fruit or beverage base: ([\d.]+)-([\d.]+)g\.$/);
+  if (match) {
+    return `已计入水果或饮品基底的天然糖范围：${match[1]}-${match[2]}g。`;
+  }
+
+  match = text.match(/^Included natural sugar range from ([^:]+): ([\d.]+)-([\d.]+)g\.$/);
+  if (match) {
+    return `已计入 ${translateNutritionTerm(match[1])} 的天然糖范围：${match[2]}-${match[3]}g。`;
+  }
+
+  match = text.match(/^Estimated tea caffeine range from tea base volume: ([\d.]+)-([\d.]+)mg\.$/);
+  if (match) {
+    return `根据茶底用量估算咖啡因范围：${match[1]}-${match[2]}mg。`;
+  }
+
+  match = text.match(/^Added sugar range adjusted by sweetness level '([^']+)': ([\d.]+)-([\d.]+)g\.$/);
+  if (match) {
+    return `按甜度档位“${getSugarTextCN(match[1])}”估算额外加糖范围：${match[2]}-${match[3]}g。`;
+  }
+
+  const translatedTerm = translateNutritionTerm(text);
+  return translatedTerm !== text ? translatedTerm : text;
+}
+
 function formatOptionalMeta(label, value) {
   if (value === undefined || value === null || value === '') return '';
   return `<span class="explain-chip">${translateExplainabilityLabel(label)}: ${escapeHtml(translateExplainabilityValue(value))}</span>`;
@@ -1171,12 +1387,13 @@ function renderReasoningItems(reasoning) {
 }
 
 function renderExplainability(log) {
-  const hasExplainability = log.data_source || log.estimation_method || log.reasoning;
+  const hasExplainability = log.data_source || log.estimation_method || log.reasoning || log.explainability;
   if (!hasExplainability) return '';
 
   const retrievalScore = log.retrieval_score !== undefined && log.retrieval_score !== null
     ? Number(log.retrieval_score).toFixed(3)
     : null;
+  const traceEvents = normalizeAgentTraceEvents(log.explainability?.graph_trace || []);
 
   return `
     <div class="log-explainability">
@@ -1196,6 +1413,50 @@ function renderExplainability(log) {
           ${renderReasoningItems(log.reasoning)}
         </ul>
       ` : ''}
+      ${traceEvents.length ? renderLogAgentTrace(traceEvents) : ''}
+    </div>
+  `;
+}
+
+function renderLogAgentTrace(events) {
+  return `
+    <details class="log-agent-trace">
+      <summary class="log-agent-trace-title">
+        <span>流程级 Agent Trace</span>
+        <strong>${events.length} 步</strong>
+      </summary>
+      <ol class="log-agent-trace-list">
+        ${events.map((event, index) => `
+          <li class="log-agent-trace-step tone-${escapeAttr(event.status)}">
+            <span class="log-agent-trace-index">${index + 1}</span>
+            <div class="log-agent-trace-content">
+              <div class="log-agent-trace-head">
+                <strong>${escapeHtml(event.label)}</strong>
+                <span>${escapeHtml(event.phase)} · ${escapeHtml(event.agent)} · ${escapeHtml(formatTraceStatus(event.status))}${event.confidence !== null && event.confidence !== undefined ? ` · ${formatConfidence(event.confidence)}` : ''}</span>
+              </div>
+              ${event.summary ? `<p>${escapeHtml(event.summary)}</p>` : ''}
+              ${event.decision ? `<div class="log-agent-trace-decision">${escapeHtml(event.decision)}</div>` : ''}
+              <div class="log-agent-trace-meta">
+                ${renderLogTraceMeta('输入', event.input)}
+                ${renderLogTraceMeta('输出', event.output)}
+              </div>
+            </div>
+          </li>
+        `).join('')}
+      </ol>
+    </details>
+  `;
+}
+
+function renderLogTraceMeta(title, data) {
+  if (!data || Object.keys(data).length === 0) return '';
+  const items = Object.entries(data)
+    .slice(0, 4)
+    .map(([key, value]) => `${formatTraceKey(key)}: ${formatTraceValue(value)}`);
+  return `
+    <div class="log-agent-trace-meta-block">
+      <span>${escapeHtml(title)}</span>
+      <small>${escapeHtml(items.join('；'))}</small>
     </div>
   `;
 }
@@ -1271,7 +1532,7 @@ function renderDailyLogs(dateLogs) {
 
       logCard.querySelector('.log-del-btn').addEventListener('click', () => deleteLog(log.id));
       logCard.addEventListener('click', (event) => {
-        if (event.target.closest('.log-del-btn')) return;
+        if (event.target.closest('.log-del-btn, .log-explainability')) return;
         showLogExplainability(log);
       });
       logCard.addEventListener('keydown', (event) => {

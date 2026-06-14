@@ -49,11 +49,13 @@ class NutritionGraphTests(unittest.TestCase):
             db.close()
 
         trace = result["explainability"]["graph_trace"]
+        trace_ids = [event.get("id") for event in trace]
         self.assertEqual(result["estimation_method"], "SQL_EXACT_MATCH")
         self.assertIsNone(result["composition"])
-        self.assertIn("lookup_knowledge", trace)
-        self.assertIn("use_knowledge_result", trace)
-        self.assertNotIn("composition_decompose", trace)
+        self.assertIn("lookup_knowledge", trace_ids)
+        self.assertIn("use_knowledge_result", trace_ids)
+        self.assertNotIn("composition_decompose", trace_ids)
+        self._assert_trace_event_shape(trace)
 
     def test_no_knowledge_path_uses_composition_nodes(self):
         db = SessionLocal()
@@ -70,11 +72,13 @@ class NutritionGraphTests(unittest.TestCase):
             db.close()
 
         trace = result["explainability"]["graph_trace"]
+        trace_ids = [event.get("id") for event in trace]
         self.assertEqual(result["estimation_method"], "COMPOSITION_ESTIMATION")
         self.assertTrue(result["explainability"]["used_composition"])
-        self.assertIn("composition_decompose", trace)
-        self.assertIn("composition_estimate", trace)
-        self.assertIn("verify_result", trace)
+        self.assertIn("composition_decompose", trace_ids)
+        self.assertIn("composition_estimate", trace_ids)
+        self.assertIn("verify_result", trace_ids)
+        self._assert_trace_event_shape(trace)
 
     def test_composition_error_falls_back_without_raising(self):
         db = SessionLocal()
@@ -92,9 +96,10 @@ class NutritionGraphTests(unittest.TestCase):
             db.close()
 
         trace = result["explainability"]["graph_trace"]
+        trace_ids = [event.get("id") for event in trace]
         self.assertNotEqual(result["estimation_method"], "COMPOSITION_ESTIMATION")
         self.assertFalse(result["explainability"]["used_composition"])
-        self.assertIn("composition_error", trace)
+        self.assertIn("composition_error", trace_ids)
         self.assertIsNone(result["composition"])
 
     def test_verify_result_adds_out_of_range_warnings(self):
@@ -169,6 +174,14 @@ class NutritionGraphTests(unittest.TestCase):
             "verification",
         }
         self.assertTrue(expected_explainability_keys.issubset(explainability.keys()))
+        self._assert_trace_event_shape(explainability["graph_trace"])
+
+    def _assert_trace_event_shape(self, trace):
+        self.assertTrue(trace)
+        for event in trace:
+            self.assertIsInstance(event, dict)
+            for key in ["id", "label", "phase", "agent", "status", "summary"]:
+                self.assertIn(key, event)
 
 
 if __name__ == "__main__":

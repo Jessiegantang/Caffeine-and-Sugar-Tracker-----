@@ -30,7 +30,7 @@ class NutritionEstimationState(TypedDict, total=False):
     selected_result: dict
     verification: dict
     final_result: dict
-    graph_trace: list[str]
+    graph_trace: list[Any]
     error: str | None
     used_composition: bool
 
@@ -47,41 +47,85 @@ def estimate_drink_nutrition(drink: dict, db) -> dict:
 
 
 def _normalize_input_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "normalize_input")
     state["normalized_drink"] = dict(state["drink"])
+    _trace(
+        state,
+        "normalize_input",
+        phase="输入",
+        agent="Input Normalizer",
+        summary="保留用户录入的饮品字段，准备进入知识检索。",
+        input=_drink_summary(state.get("drink") or {}),
+        output=_drink_summary(state["normalized_drink"]),
+    )
     return state
 
 
 def _lookup_knowledge_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "lookup_knowledge")
     state["knowledge_result"] = enrich_drink_data(dict(state["normalized_drink"]), state["db"])
+    _trace(
+        state,
+        "lookup_knowledge",
+        phase="检索",
+        agent="Knowledge Lookup Agent",
+        summary="查询精确知识库和 RAG 候选，得到可复用的营养估算结果。",
+        input=_drink_summary(state.get("normalized_drink") or {}),
+        output=_result_summary(state["knowledge_result"]),
+        confidence=state["knowledge_result"].get("confidence"),
+    )
     return state
 
 
 def _route_estimation_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "route_estimation")
     state["route"] = "composition" if _should_use_composition(state["knowledge_result"]) else "knowledge"
+    _trace(
+        state,
+        "route_estimation",
+        phase="决策",
+        agent="Estimation Router",
+        summary="根据知识库结果的可信度决定直接采用匹配结果，还是进入成分拆解估算。",
+        input=_result_summary(state.get("knowledge_result") or {}),
+        output={"route": state["route"]},
+        decision="进入成分估算" if state["route"] == "composition" else "采用知识库结果",
+        confidence=(state.get("knowledge_result") or {}).get("confidence"),
+    )
     return state
 
 
 def _use_knowledge_result_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "use_knowledge_result")
     state["selected_result"] = state["knowledge_result"]
     state["used_composition"] = False
+    _trace(
+        state,
+        "use_knowledge_result",
+        phase="选择",
+        agent="Knowledge Result Selector",
+        summary="知识库匹配足够可信，直接采用该结果作为最终营养估算基础。",
+        input=_result_summary(state.get("knowledge_result") or {}),
+        output=_result_summary(state["selected_result"]),
+        confidence=state["selected_result"].get("confidence"),
+    )
     return state
 
 
 def _composition_decompose_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "composition_decompose")
     try:
         state["composition"] = decompose_drink(state["normalized_drink"])
+        _trace(
+            state,
+            "composition_decompose",
+            phase="拆解",
+            agent="Composition Decomposition Agent",
+            summary="把饮品名称、类型、容量和甜度拆成可估算的成分结构。",
+            input=_drink_summary(state.get("normalized_drink") or {}),
+            output=_composition_summary(state["composition"]),
+            confidence=state["composition"].get("confidence"),
+        )
     except Exception as e:
         _handle_composition_error(state, e)
     return state
 
 
 def _composition_estimate_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "composition_estimate")
     if state.get("route") != "composition":
         return state
 
@@ -108,13 +152,22 @@ def _composition_estimate_node(state: NutritionEstimationState) -> NutritionEsti
             state["normalized_drink"],
         )
         state["used_composition"] = True
+        _trace(
+            state,
+            "composition_estimate",
+            phase="估算",
+            agent="Composition Estimation Agent",
+            summary="按成分范围累计咖啡因和糖分，并给出当前最可能估算值。",
+            input=_composition_summary(state.get("composition") or {}),
+            output=_result_summary(state["composition_result"]),
+            confidence=state["composition_result"].get("confidence"),
+        )
     except Exception as e:
         _handle_composition_error(state, e)
     return state
 
 
 def _verify_result_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "verify_result")
     result = state.get("selected_result") or state.get("knowledge_result") or {}
     warnings = list((result.get("composition") or {}).get("warnings") or [])
     issues: list[str] = []
@@ -149,21 +202,40 @@ def _verify_result_node(state: NutritionEstimationState) -> NutritionEstimationS
         "warnings": _dedupe_strings(warnings),
         "issues": issues,
     }
+    _trace(
+        state,
+        "verify_result",
+        phase="校验",
+        agent="Result Verifier",
+        summary="检查数值范围、路由一致性和成分结果完整性。",
+        input=_result_summary(result),
+        output=state["verification"],
+        status="warning" if state["verification"]["warnings"] else "completed",
+    )
     return state
 
 
 def _build_explainability_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    _trace(state, "build_explainability")
     result = state.get("selected_result") or state.get("knowledge_result") or state.get("normalized_drink") or {}
     normalized = _normalize_result(result, used_composition=bool(state.get("used_composition")))
     explainability = normalized.get("explainability") or {}
     verification = state.get("verification") or {"passed": True, "warnings": [], "issues": []}
     existing_warnings = explainability.get("warnings") or []
     explainability["warnings"] = _dedupe_strings(existing_warnings + (verification.get("warnings") or []))
-    explainability["graph_trace"] = list(state.get("graph_trace") or [])
     explainability["verification"] = verification
     normalized["explainability"] = explainability
     state["final_result"] = normalized
+    _trace(
+        state,
+        "build_explainability",
+        phase="输出",
+        agent="Explainability Builder",
+        summary="组装前端展示所需的解释性字段、证据和流程 trace。",
+        input=_result_summary(result),
+        output=_result_summary(normalized),
+        confidence=normalized.get("confidence"),
+    )
+    explainability["graph_trace"] = list(state.get("graph_trace") or [])
     return state
 
 
@@ -181,11 +253,106 @@ def _handle_composition_error(state: NutritionEstimationState, error: Exception)
     state["route"] = "fallback_knowledge"
     state["selected_result"] = state.get("knowledge_result", {})
     state["used_composition"] = False
-    _trace(state, "composition_error")
+    _trace(
+        state,
+        "composition_error",
+        phase="异常",
+        agent="Composition Agent",
+        summary="成分估算失败，回退到知识库或兜底结果。",
+        output={"error": str(error), "route": state["route"]},
+        status="error",
+    )
 
 
-def _trace(state: NutritionEstimationState, node: str) -> None:
-    state.setdefault("graph_trace", []).append(node)
+def _trace(
+    state: NutritionEstimationState,
+    node: str,
+    *,
+    phase: str,
+    agent: str,
+    summary: str,
+    input: dict | None = None,
+    output: dict | None = None,
+    decision: str | None = None,
+    confidence: Any = None,
+    status: str = "completed",
+) -> None:
+    event = {
+        "id": node,
+        "label": TRACE_LABELS.get(node, node),
+        "phase": phase,
+        "agent": agent,
+        "status": status,
+        "summary": summary,
+    }
+    if input is not None:
+        event["input"] = input
+    if output is not None:
+        event["output"] = output
+    if decision:
+        event["decision"] = decision
+    if confidence is not None:
+        event["confidence"] = _clamp_confidence(confidence)
+    state.setdefault("graph_trace", []).append(event)
+
+
+TRACE_LABELS = {
+    "normalize_input": "标准化输入",
+    "lookup_knowledge": "知识库检索",
+    "route_estimation": "路由决策",
+    "use_knowledge_result": "采用知识结果",
+    "composition_decompose": "成分拆解",
+    "composition_estimate": "成分估算",
+    "composition_error": "成分估算异常",
+    "verify_result": "结果校验",
+    "build_explainability": "生成解释",
+}
+
+
+def _drink_summary(drink: dict) -> dict:
+    return _drop_empty({
+        "brand": drink.get("brand"),
+        "name": drink.get("name"),
+        "type": drink.get("type"),
+        "volume_ml": drink.get("volume"),
+        "sugar": drink.get("sugar"),
+    })
+
+
+def _result_summary(result: dict) -> dict:
+    return _drop_empty({
+        "method": result.get("estimation_method"),
+        "source": result.get("data_source"),
+        "caffeine_mg": result.get("caffeine"),
+        "sugar_g": result.get("sugarContent"),
+        "confidence": result.get("confidence"),
+        "matched_knowledge_id": result.get("matched_knowledge_id"),
+        "retrieval_score": result.get("retrieval_score"),
+        "components": len((result.get("composition") or {}).get("components") or []),
+    })
+
+
+def _composition_summary(composition: dict) -> dict:
+    return _drop_empty({
+        "drink_type": composition.get("drink_type"),
+        "espresso_shots": composition.get("espresso_shots"),
+        "tea_base_volume_ml": composition.get("tea_base_volume_ml"),
+        "milk_volume_ml": composition.get("milk_volume_ml"),
+        "fruit_base_volume_ml": composition.get("fruit_base_volume_ml"),
+        "syrup_pumps": composition.get("syrup_pumps"),
+        "sweetness_level": composition.get("sweetness_level"),
+        "confidence": composition.get("confidence"),
+        "assumptions": composition.get("assumptions"),
+        "warnings": composition.get("warnings"),
+    })
+
+
+def _drop_empty(values: dict) -> dict:
+    return {
+        key: value
+        for key, value in values.items()
+        if value is not None and value != "" and value != [] and value != {}
+    }
 
 
 def _build_graph():

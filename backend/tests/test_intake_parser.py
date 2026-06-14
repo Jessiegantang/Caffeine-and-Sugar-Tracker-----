@@ -47,6 +47,12 @@ class IntakeParserTests(unittest.TestCase):
 
         self.assertEqual(result["sugar"], "half")
 
+    def test_symptom_message_routes_to_advice_not_logging(self):
+        result = parse_intake_message("\u6211\u4eca\u5929\u8fd9\u676f\u751f\u6930\u7f8e\u5f0f\u559d\u5f97\u6709\u70b9\u4e45\uff0c\u4e00\u76f4\u60f3\u5e72\u5455")
+
+        self.assertEqual(result["intent"], "ask_advice")
+        self.assertEqual(result["missing_fields"], [])
+
     def test_manner_americano_brand_and_name(self):
         result = parse_intake_message("\u521a\u559d\u4e86 Manner \u67da\u5b50\u7f8e\u5f0f \u5927\u676f \u4e09\u5206\u7cd6")
 
