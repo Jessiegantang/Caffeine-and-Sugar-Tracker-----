@@ -14,7 +14,7 @@ from db.database import DrinkLog, ProductCandidate
 from services.drink_log_service import safe_json_loads, serialize_drink_log
 
 
-KNOWN_DRINK_TYPES = {"coffee", "teacoffee", "tea", "milktea", "fruittea", "soda", "alcohol"}
+KNOWN_DRINK_TYPES = {"coffee", "teacoffee", "tea", "milktea", "fruittea", "soda"}
 
 
 def _numeric_delta(previous, corrected) -> float:

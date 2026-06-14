@@ -53,6 +53,35 @@ class CompositionAgentTests(unittest.TestCase):
         self.assert_valid_range(result["sugar_range"], "g")
         self.assertLessEqual(result["sugar_range"]["max"], 2.0)
 
+    def test_orange_americano_uses_generic_fruit_base(self):
+        result = estimate_composition_nutrition({
+            "brand": "Luckin",
+            "name": "orange americano",
+            "type": "coffee",
+            "volume": 500,
+            "sugar": "none",
+        })
+
+        composition = result["composition"]
+        self.assertEqual(composition["drink_type"], "fruit_americano")
+        self.assertEqual(composition["fruit_base"], "fruit_or_juice_base")
+        self.assertGreater(result["caffeine"], 100)
+        self.assertGreater(result["sugarContent"], 10)
+
+    def test_chinese_mulberry_americano_uses_generic_fruit_base(self):
+        result = estimate_composition_nutrition({
+            "brand": "Cotti",
+            "name": "桑葚美式",
+            "type": "coffee",
+            "volume": 500,
+            "sugar": "none",
+        })
+
+        composition = result["composition"]
+        self.assertEqual(composition["drink_type"], "fruit_americano")
+        self.assertEqual(composition["fruit_base"], "fruit_or_juice_base")
+        self.assertGreater(result["sugarContent"], 10)
+
     def test_latte_includes_milk_natural_sugar(self):
         result = estimate_composition_nutrition({
             "name": "Latte",

@@ -1,9 +1,8 @@
 import uuid
 
-from agents.health_plan_agent import create_health_plan, serialize_plan
 from agents.intake_parser import parse_intake_message
-from agents.memory_agent import apply_memory_updates
 from agents.orchestrator import run_agent_orchestrator
+from services.memory_service import apply_memory_updates
 from services.trace_service import save_agent_trace
 
 
@@ -29,8 +28,5 @@ def parse_intake(db, input_data) -> dict:
 def act(db, input_data) -> dict:
     agent_state = run_agent_orchestrator(input_data.message, input_data.date, db)
     agent_state["memory_updates"] = apply_memory_updates(db, agent_state.get("memory_updates", {}))
-    if agent_state.get("intent") == "create_health_plan":
-        plan = create_health_plan(db, input_data.message, input_data.date)
-        agent_state["health_plan"] = serialize_plan(plan)
     save_agent_trace(db, agent_state)
     return {"status": "success", "agent_state": agent_state}

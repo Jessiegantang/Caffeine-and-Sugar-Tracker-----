@@ -34,7 +34,6 @@ export const elements = {
   
   caffeineTotal: getElementByIdSafe('caffeine-total'),
   sugarTotal: getElementByIdSafe('sugar-total'),
-  alcoholTotal: getElementByIdSafe('alcohol-total'),
   caffeineProgress: getElementByIdSafe('caffeine-progress'),
   sugarProgress: getElementByIdSafe('sugar-progress'),
   
@@ -56,7 +55,6 @@ export const elements = {
   // Weekly Tab
   weeklyCaffeineTotal: getElementByIdSafe('weekly-caffeine-total'),
   weeklySugarTotal: getElementByIdSafe('weekly-sugar-total'),
-  weeklyAlcoholTotal: getElementByIdSafe('weekly-alcohol-total'),
   weeklyActiveDays: getElementByIdSafe('weekly-active-days'),
   weeklyChartContainer: getElementByIdSafe('weekly-chart-container'),
   weeklyInsightsList: getElementByIdSafe('weekly-insights-list'),

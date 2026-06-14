@@ -4,8 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from agents.health_plan_agent import build_plan_days, infer_plan_target
-from agents.nutrition_agent import estimate_from_parsed_drink
+from services.nutrition_estimation_service import estimate_from_parsed_drink
 from agents.orchestrator import run_agent_orchestrator
 from db.database import DrinkKnowledge, SessionLocal
 from knowledge.knowledge_lookup import enrich_drink_data
@@ -184,7 +183,7 @@ class NutritionAgentTests(unittest.TestCase):
                 db.commit()
             db.close()
 
-    def test_nutrition_agent_uses_composition_when_no_knowledge_match(self):
+    def test_nutrition_estimation_service_uses_composition_when_no_knowledge_match(self):
         db = SessionLocal()
         try:
             result = estimate_from_parsed_drink({
@@ -204,9 +203,9 @@ class NutritionAgentTests(unittest.TestCase):
         self.assertTrue(result["composition"]["components"])
         self.assertTrue(result["reasoning"])
 
-    def test_nutrition_agent_keeps_sql_exact_match(self):
+    def test_nutrition_estimation_service_keeps_sql_exact_match(self):
         db = SessionLocal()
-        kb_id = "test_nutrition_agent_exact_kb"
+        kb_id = "test_nutrition_estimation_service_exact_kb"
         try:
             existing = db.query(DrinkKnowledge).filter(DrinkKnowledge.id == kb_id).first()
             if existing:
@@ -260,15 +259,6 @@ class NutritionAgentTests(unittest.TestCase):
         self.assertEqual(state["final_action"], "fill_log_form")
         self.assertEqual(state["nutrition_result"]["estimation_method"], "COMPOSITION_ESTIMATION")
         self.assertIn("COMPOSITION_ESTIMATION", state["tools_used"])
-
-    def test_health_plan_is_structured_for_seven_days(self):
-        target = infer_plan_target("我想一周内减少奶茶糖分")
-        plan = build_plan_days(target)
-
-        self.assertEqual(target, "reduce_sugar")
-        self.assertEqual(len(plan), 7)
-        self.assertEqual(set(plan[0].keys()), {"day", "goal", "suggestion", "status"})
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import unittest
 import json
@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 import main
 from workflows.nutrition_pipeline import estimate_drink_nutrition
-from db.database import DrinkKnowledge, DrinkLog, HealthPlan, NutritionEvidence, ProductCandidate, SessionLocal
+from db.database import DrinkKnowledge, DrinkLog, NutritionEvidence, ProductCandidate, SessionLocal
 
 
 class ApiTests(unittest.TestCase):
@@ -51,9 +51,6 @@ class ApiTests(unittest.TestCase):
                 "Feedback Invalid Drink",
             ])).all():
                 db.delete(row)
-            for plan in db.query(HealthPlan).filter(HealthPlan.id.like("plan_%")).all():
-                if plan.target in {"reduce_sugar", "reduce_caffeine", "work_week_strategy", "balanced_drink_routine"}:
-                    db.delete(plan)
             db.commit()
         finally:
             db.close()
@@ -96,20 +93,6 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(clear_response.status_code, 200)
         self.assertEqual(self.client.get("/api/user/preferences").json()["preferences"], {})
 
-    def test_health_plan_api_creates_and_updates_plan(self):
-        response = self.client.post("/api/health/plans", json={
-            "date": "2026-06-04",
-            "goal": "我想一周内减少奶茶糖分",
-        })
-
-        self.assertEqual(response.status_code, 200)
-        plan = response.json()["plan"]
-        self.assertEqual(plan["target"], "reduce_sugar")
-        self.assertEqual(len(plan["plan_content"]), 7)
-
-        progress = self.client.post("/api/health/plans/active/progress?date=2026-06-06").json()["plan"]
-        self.assertEqual(progress["current_day"], 3)
-
     def test_log_drink_api_uses_composition_without_persisting_extra_fields(self):
         response = self.client.post("/api/log_drink", json={
             "id": "test_api_composition_log",
@@ -123,8 +106,6 @@ class ApiTests(unittest.TestCase):
             "endTime": "10:15",
             "caffeine": 0,
             "sugarContent": 0,
-            "alcoholContent": 0,
-            "abv": 0,
         })
 
         self.assertEqual(response.status_code, 200)
@@ -170,8 +151,6 @@ class ApiTests(unittest.TestCase):
                 endTime="09:10",
                 caffeine=120,
                 sugarContent=0,
-                alcoholContent=0,
-                abv=0,
                 status="active",
             ))
             db.add(DrinkLog(
@@ -186,8 +165,6 @@ class ApiTests(unittest.TestCase):
                 endTime="11:10",
                 caffeine=100,
                 sugarContent=10,
-                alcoholContent=0,
-                abv=0,
                 status="active",
                 composition_json="{bad",
                 explainability_json="{bad",
@@ -219,8 +196,6 @@ class ApiTests(unittest.TestCase):
                 endTime="09:10",
                 caffeine=80,
                 sugarContent=8,
-                alcoholContent=0,
-                abv=0,
                 status="active",
                 explainability_json=json.dumps({"method": "COMPOSITION_ESTIMATION"}),
             ))
@@ -279,8 +254,6 @@ class ApiTests(unittest.TestCase):
                 endTime="10:10",
                 caffeine=40,
                 sugarContent=4,
-                alcoholContent=0,
-                abv=0,
                 status="active",
             ))
             db.commit()
@@ -354,8 +327,6 @@ class ApiTests(unittest.TestCase):
                 endTime="11:10",
                 caffeine=50,
                 sugarContent=5,
-                alcoholContent=0,
-                abv=0,
                 status="active",
             ))
             db.commit()
@@ -394,8 +365,6 @@ class ApiTests(unittest.TestCase):
                 endTime="11:10",
                 caffeine=50,
                 sugarContent=5,
-                alcoholContent=0,
-                abv=0,
                 status="active",
             ))
             db.commit()

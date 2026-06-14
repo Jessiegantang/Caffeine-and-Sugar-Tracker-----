@@ -249,8 +249,6 @@ def _merge_drink_context(enriched: dict, nutrition: dict, original: dict) -> dic
         "startTime",
         "endTime",
         "status",
-        "alcoholContent",
-        "abv",
         "baseSugarDensity",
         "agent_trace_id",
     ]:

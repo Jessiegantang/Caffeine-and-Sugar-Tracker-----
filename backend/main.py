@@ -13,10 +13,21 @@ from db.database import init_db
 
 app = FastAPI(title="DrinkMind Agent API")
 
-# Setup CORS
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+
+def get_cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ALLOW_ORIGINS", "")
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return origins or DEFAULT_CORS_ORIGINS
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict to frontend domain
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -57,7 +57,6 @@ def sync_approved_knowledge(kb: DrinkKnowledge) -> None:
         "volume": kb.volume,
         "caffeine": kb.caffeine,
         "baseSugar": kb.baseSugar,
-        "abv": kb.abv,
         "source": kb.source,
         "confidence": kb.confidence,
     })

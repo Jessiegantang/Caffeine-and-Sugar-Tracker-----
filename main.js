@@ -2,10 +2,7 @@
 // Caffeine and Sugar Tracker - Main Coordinator
 // ==========================================
 
-import { PRESET_TEMPLATES, CAFFEINE_LIMIT, SUGAR_LIMIT, SWEETENER_SUGAR_DENSITIES } from './src/config.js';
-import {
-  calculateAlcohol
-} from './src/calculator.js';
+import { PRESET_TEMPLATES, CAFFEINE_LIMIT, SUGAR_LIMIT } from './src/config.js';
 import {
   loadLogs,
   saveLogs,
@@ -64,11 +61,6 @@ function setupMemoryDebugApi() {
   window.DrinkMindMemory = {
     list: () => api.fetchUserPreferencesApi(),
     clear: () => api.clearUserPreferencesApi()
-  };
-  window.DrinkMindPlans = {
-    create: (goal, date = state.selectedDate) => api.createHealthPlanApi(date, goal),
-    active: () => api.fetchActiveHealthPlanApi(),
-    refresh: (date = state.selectedDate) => api.refreshActiveHealthPlanApi(date)
   };
 }
 
@@ -269,6 +261,10 @@ function setupEventListeners() {
   window.addEventListener('drinkmind:intake-parsed', (e) => {
     applyParsedIntakeToForm(e.detail);
   });
+  window.addEventListener('drinkmind:add-parsed-intake', (e) => {
+    applyParsedIntakeToForm(e.detail);
+    handleAddDrink();
+  });
   window.addEventListener('drinkmind:nutrition-result', (e) => {
     state.lastNutritionResult = e.detail || null;
     renderNutritionExplainabilityPanel();
@@ -280,7 +276,6 @@ function setupEventListeners() {
     }
   });
   document.getElementById('agent-refresh-btn')?.addEventListener('click', renderAgentWorkspace);
-  document.getElementById('plan-create-btn')?.addEventListener('click', handleCreateVisiblePlan);
   document.getElementById('memory-clear-btn')?.addEventListener('click', async () => {
     await api.clearUserPreferencesApi();
     await renderAgentWorkspace();
@@ -294,52 +289,12 @@ function getCurrentTimeString() {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
-async function handleCreateVisiblePlan() {
-  const input = document.getElementById('plan-goal-input');
-  const goal = input?.value?.trim();
-  if (!goal) return;
-  await api.createHealthPlanApi(state.selectedDate, goal);
-  input.value = '';
-  await renderAgentWorkspace();
-}
-
 async function renderAgentWorkspace() {
   await Promise.allSettled([
-    renderActivePlanPanel(),
     renderMemoryPanel(),
     renderTracePanel()
   ]);
   renderNutritionExplainabilityPanel();
-}
-
-async function renderActivePlanPanel() {
-  const panel = document.getElementById('active-plan-panel');
-  if (!panel) return;
-  try {
-    await api.refreshActiveHealthPlanApi(state.selectedDate);
-    const data = await api.fetchActiveHealthPlanApi();
-    const plan = data.plan;
-    if (!plan) {
-      panel.className = 'agent-panel-body muted';
-      panel.textContent = 'No active plan';
-      return;
-    }
-    const current = (plan.plan_content || []).find(item => item.day === plan.current_day) || (plan.plan_content || [])[0];
-    panel.className = 'agent-panel-body';
-    panel.innerHTML = `
-      <div class="agent-kv"><span>Target</span><strong>${escapeHtml(plan.target)}</strong></div>
-      <div class="agent-kv"><span>Day</span><strong>${plan.current_day}/${plan.total_days}</strong></div>
-      ${current ? `<div class="agent-current-step">${escapeHtml(current.suggestion)}</div>` : ''}
-      <div class="agent-plan-days">
-        ${(plan.plan_content || []).map(item => `
-          <span class="plan-day-pill status-${escapeHtml(item.status)}">${item.day}</span>
-        `).join('')}
-      </div>
-    `;
-  } catch (e) {
-    panel.className = 'agent-panel-body muted';
-    panel.textContent = 'Backend unavailable';
-  }
 }
 
 async function renderMemoryPanel() {
@@ -350,7 +305,7 @@ async function renderMemoryPanel() {
     const entries = Object.entries(data.preferences || {});
     if (entries.length === 0) {
       panel.className = 'agent-panel-body muted';
-      panel.textContent = 'No memory';
+      panel.textContent = '暂无记忆';
       return;
     }
     panel.className = 'agent-panel-body';
@@ -359,7 +314,7 @@ async function renderMemoryPanel() {
     `).join('');
   } catch (e) {
     panel.className = 'agent-panel-body muted';
-    panel.textContent = 'Backend unavailable';
+    panel.textContent = '后端暂不可用';
   }
 }
 
@@ -371,7 +326,7 @@ async function renderTracePanel() {
     const traces = data.traces || [];
     if (traces.length === 0) {
       panel.className = 'agent-panel-body muted';
-      panel.textContent = 'No traces';
+      panel.textContent = '暂无调用轨迹';
       return;
     }
     panel.className = 'agent-panel-body trace-stack';
@@ -383,7 +338,7 @@ async function renderTracePanel() {
     `).join('');
   } catch (e) {
     panel.className = 'agent-panel-body muted';
-    panel.textContent = 'Backend unavailable';
+    panel.textContent = '后端暂不可用';
   }
 }
 
@@ -394,7 +349,7 @@ function renderNutritionExplainabilityPanel() {
   const result = state.lastNutritionResult;
   if (!result) {
     panel.className = 'agent-panel-body muted';
-    panel.textContent = 'No nutrition estimate yet';
+    panel.textContent = '暂无营养估算结果';
     return;
   }
 
@@ -417,10 +372,10 @@ function renderNutritionExplainabilityPanel() {
   panel.className = 'agent-panel-body nutrition-explainability-body';
   panel.innerHTML = `
     <div class="estimate-result-summary">
-      ${renderNutritionMetric('Caffeine', `${formatNumber(result.caffeine)} mg`)}
-      ${renderNutritionMetric('Sugar', `${formatNumber(result.sugarContent)} g`)}
-      ${renderNutritionMetric('Confidence', mapConfidenceLevel(confidenceValue))}
-      ${renderNutritionMetric('Source', userSource)}
+      ${renderNutritionMetric('咖啡因', `${formatNumber(result.caffeine)} mg`)}
+      ${renderNutritionMetric('糖分', `${formatNumber(result.sugarContent)} g`)}
+      ${renderNutritionMetric('置信度', mapConfidenceLevel(confidenceValue))}
+      ${renderNutritionMetric('来源', userSource)}
     </div>
 
     <div class="estimate-explanation">${escapeHtml(userExplanation)}</div>
@@ -446,38 +401,38 @@ function renderNutritionExplainabilityPanel() {
 
 function mapConfidenceLevel(value) {
   const num = Number(value ?? 0);
-  if (!Number.isFinite(num)) return 'Low';
-  if (num >= 0.8) return 'High';
-  if (num >= 0.55) return 'Medium';
-  return 'Low';
+  if (!Number.isFinite(num)) return '低';
+  if (num >= 0.8) return '高';
+  if (num >= 0.55) return '中';
+  return '低';
 }
 
 function mapEstimateSource(result, explainability, feedback) {
   const method = String(result.estimation_method || explainability.method || '').toLowerCase();
   const source = String(result.data_source || '').toLowerCase();
-  if (feedback?.corrected || method.includes('feedback') || source.includes('user')) return 'User corrected';
-  if (explainability.used_knowledge_match || result.matched_knowledge_id || source.includes('knowledge')) return 'Knowledge match';
-  if (explainability.used_composition || result.composition || method.includes('composition')) return 'Composition estimate';
-  return 'Fallback estimate';
+  if (feedback?.corrected || method.includes('feedback') || source.includes('user')) return '用户修正';
+  if (explainability.used_knowledge_match || result.matched_knowledge_id || source.includes('knowledge')) return '知识库匹配';
+  if (explainability.used_composition || result.composition || method.includes('composition')) return '成分估算';
+  return '兜底估算';
 }
 
 function getEstimateExplanation(source, explainability, result) {
-  if (source === 'User corrected') {
-    return 'This estimate includes a user correction saved for this drink log.';
+  if (source === '用户修正') {
+    return '这个结果包含你为本条记录保存的人工修正。';
   }
-  if (source === 'Knowledge match') {
-    return 'This uses a reviewed drink knowledge match.';
+  if (source === '知识库匹配') {
+    return '这个结果来自已审核的饮品知识库匹配，并按容量和糖度做了换算。';
   }
-  if (source === 'Composition estimate') {
-    return 'No trusted product match was found, so this was estimated from likely ingredients.';
+  if (source === '成分估算') {
+    return '没有找到足够可信的产品匹配，所以后端根据可能的成分组成进行了估算。';
   }
   if (result.feedback_notice) {
     return result.feedback_notice;
   }
   if (explainability.warnings?.length) {
-    return 'This is a fallback estimate and may need correction if you have label details.';
+    return '这是兜底估算；如果你有包装营养表或官方数据，可以在下方修正。';
   }
-  return 'This is a fallback estimate based on the available drink details.';
+  return '这是基于当前饮品信息得到的兜底估算。';
 }
 
 function renderNutritionTechnicalDetails(details) {
@@ -499,37 +454,37 @@ function renderNutritionTechnicalDetails(details) {
 
   return `
     <details class="nutrition-technical-details">
-      <summary>Technical details</summary>
+      <summary>技术详情</summary>
       <div class="nutrition-technical-stack">
         <div class="nutrition-explain-section">
-          <div class="nutrition-explain-title">Method</div>
+          <div class="nutrition-explain-title">估算方法</div>
           <div class="explain-chips">
-            <span class="explain-chip">method: ${escapeHtml(result.estimation_method || explainability.method || 'Unknown')}</span>
-            <span class="explain-chip">raw source: ${escapeHtml(result.data_source || 'Unknown')}</span>
+            <span class="explain-chip">方法: ${escapeHtml(result.estimation_method || explainability.method || '未知')}</span>
+            <span class="explain-chip">原始来源: ${escapeHtml(result.data_source || '未知')}</span>
           </div>
         </div>
 
         <div class="nutrition-explain-section">
-          <div class="nutrition-explain-title">Knowledge match</div>
+          <div class="nutrition-explain-title">知识库匹配</div>
           <div class="explain-chips">
-            <span class="explain-chip">used: ${usedKnowledge ? 'yes' : 'no'}</span>
-            ${matchedId ? `<span class="explain-chip">id: ${escapeHtml(matchedId)}</span>` : ''}
-            ${retrievalScore !== null && retrievalScore !== undefined ? `<span class="explain-chip">score: ${escapeHtml(Number(retrievalScore).toFixed(3))}</span>` : ''}
+            <span class="explain-chip">是否使用: ${usedKnowledge ? '是' : '否'}</span>
+            ${matchedId ? `<span class="explain-chip">匹配 ID: ${escapeHtml(matchedId)}</span>` : ''}
+            ${retrievalScore !== null && retrievalScore !== undefined ? `<span class="explain-chip">检索分数: ${escapeHtml(Number(retrievalScore).toFixed(3))}</span>` : ''}
           </div>
         </div>
 
         ${renderLangGraphWorkflow(graphTrace, verification)}
 
         <div class="nutrition-explain-section">
-          <div class="nutrition-explain-title">Composition</div>
+          <div class="nutrition-explain-title">成分拆解</div>
           ${usedComposition
             ? renderComponentsTable(components)
-            : '<div class="nutrition-empty-note">Not used; exact knowledge match was available.</div>'}
+            : '<div class="nutrition-empty-note">未使用成分拆解，因为已有可信知识库匹配。</div>'}
         </div>
 
-        ${renderTextList('Reasoning', reasoning)}
-        ${renderTextList('Assumptions', assumptions)}
-        ${renderTextList('Warnings', warnings, 'warning')}
+        ${renderTextList('推理说明', reasoning)}
+        ${renderTextList('估算假设', assumptions)}
+        ${renderTextList('提醒', warnings, 'warning')}
         ${renderFeedbackMetadata(feedback, result.feedback_notice)}
       </div>
     </details>
@@ -559,7 +514,7 @@ function renderLangGraphWorkflow(graphTrace, verification) {
       ${verification ? `
         <div class="langgraph-verification">
           <div class="explain-chips">
-            <span class="explain-chip">验证通过：${formatVerificationPassed(passed)}</span>
+            <span class="explain-chip">验证通过: ${formatVerificationPassed(passed)}</span>
           </div>
           ${warnings.length ? renderInlineTextList('警告', warnings, 'warning') : ''}
           ${issues.length ? renderInlineTextList('问题', issues, 'issue') : ''}
@@ -573,7 +528,6 @@ function formatVerificationPassed(value) {
   if (value === undefined || value === null) return '未知';
   return value ? '是' : '否';
 }
-
 function renderInlineTextList(label, items, tone = '') {
   const values = normalizeTextList(items);
   if (values.length === 0) return '';
@@ -617,23 +571,23 @@ function showLogExplainability(log) {
       caffeine: log.caffeine,
       sugarContent: log.sugarContent,
       confidence: log.confidence,
-      estimation_method: log.estimation_method || 'Unknown',
-      data_source: log.data_source || 'Unknown',
+      estimation_method: log.estimation_method || '未知',
+      data_source: log.data_source || '未知',
       matched_knowledge_id: log.matched_knowledge_id || null,
       retrieval_score: log.retrieval_score ?? null,
-      reasoning: ['No explainability saved for this log'],
+      reasoning: ['这条记录没有保存可解释性详情'],
       composition: null,
       explainability: {
-        method: log.estimation_method || 'Unknown',
+        method: log.estimation_method || '未知',
         used_composition: false,
         used_knowledge_match: Boolean(log.matched_knowledge_id),
         matched_knowledge_id: log.matched_knowledge_id || null,
         retrieval_score: log.retrieval_score ?? null,
         confidence: log.confidence ?? 0,
-        reasoning: ['No explainability saved for this log'],
+        reasoning: ['这条记录没有保存可解释性详情'],
         components: [],
         assumptions: [],
-        warnings: ['No explainability saved for this log']
+        warnings: ['这条记录没有保存可解释性详情']
       }
     };
   }
@@ -652,15 +606,15 @@ function renderNutritionMetric(label, value) {
 
 function renderComponentsTable(components) {
   if (!components || components.length === 0) {
-    return '<div class="nutrition-empty-note">No components returned.</div>';
+    return '<div class="nutrition-empty-note">后端没有返回成分明细。</div>';
   }
   return `
     <div class="nutrition-component-list">
       ${components.map(component => `
         <div class="nutrition-component-row">
           <div>
-            <strong>${escapeHtml(component.name || 'component')}</strong>
-            <span>${escapeHtml(component.category || 'unknown')}</span>
+            <strong>${escapeHtml(component.name || '成分')}</strong>
+            <span>${escapeHtml(component.category || '未知类别')}</span>
           </div>
           <div>${escapeHtml(formatAmount(component.amount, component.unit))}</div>
           <div>${formatNumber(component.caffeine_mg)}mg</div>
@@ -677,12 +631,12 @@ function renderFeedbackMetadata(feedback, notice = '') {
   if (!feedback && !notice) return '';
   return `
     <div class="nutrition-explain-section feedback-summary">
-      <div class="nutrition-explain-title">Feedback</div>
+      <div class="nutrition-explain-title">修正记录</div>
       ${notice ? `<div class="feedback-notice">${escapeHtml(notice)}</div>` : ''}
       ${feedback ? `
         <div class="explain-chips">
-          <span class="explain-chip">source: ${escapeHtml(feedback.source_type || 'user_feedback')}</span>
-          <span class="explain-chip">high delta: ${feedback.high_delta ? 'yes' : 'no'}</span>
+          <span class="explain-chip">来源: ${escapeHtml(feedback.source_type || 'user_feedback')}</span>
+          <span class="explain-chip">差异较大: ${feedback.high_delta ? '是' : '否'}</span>
         </div>
         ${feedback.source_note ? `<div class="nutrition-empty-note">${escapeHtml(feedback.source_note)}</div>` : ''}
       ` : ''}
@@ -703,29 +657,29 @@ function renderNutritionFeedbackForm(result) {
 
   return `
     <form id="nutrition-feedback-form" class="nutrition-feedback-form" data-log-id="${escapeAttr(logId)}">
-      <div class="nutrition-explain-title">Correct estimate</div>
+      <div class="nutrition-explain-title">修正估算结果</div>
       <div class="feedback-form-grid feedback-form-grid-simple">
-        <label>Caffeine<input name="caffeine" type="number" min="0" max="800" step="0.1" value="${escapeAttr(caffeine)}" required></label>
-        <label>Sugar<input name="sugarContent" type="number" min="0" max="150" step="0.1" value="${escapeAttr(sugarContent)}" required></label>
+        <label>咖啡因<input name="caffeine" type="number" min="0" max="800" step="0.1" value="${escapeAttr(caffeine)}" required></label>
+        <label>糖分<input name="sugarContent" type="number" min="0" max="150" step="0.1" value="${escapeAttr(sugarContent)}" required></label>
       </div>
-      <label class="feedback-note-label">Source note<textarea name="source_note" rows="2" placeholder="Package label says caffeine 120mg, sugar 18g"></textarea></label>
+      <label class="feedback-note-label">数据来源说明<textarea name="source_note" rows="2" placeholder="例如：包装营养表标注咖啡因 120mg，糖 18g"></textarea></label>
       <div class="feedback-options">
-        <label><input type="checkbox" name="apply_to_log" checked> Update this log</label>
+        <label><input type="checkbox" name="apply_to_log" checked> 更新这条记录</label>
       </div>
       <details class="feedback-advanced-details">
-        <summary>Advanced correction fields</summary>
+        <summary>高级修正字段</summary>
         <div class="feedback-form-grid">
-          <label>Brand<input name="brand" value="${escapeAttr(brand)}"></label>
-          <label>Name<input name="name" value="${escapeAttr(name)}" required></label>
-          <label>Type<select name="type">${renderFeedbackTypeOptions(type)}</select></label>
-          <label>Volume<input name="volume" type="number" min="10" max="2000" value="${escapeAttr(volume)}" required></label>
+          <label>品牌<input name="brand" value="${escapeAttr(brand)}"></label>
+          <label>名称<input name="name" value="${escapeAttr(name)}" required></label>
+          <label>类型<select name="type">${renderFeedbackTypeOptions(type)}</select></label>
+          <label>容量<input name="volume" type="number" min="10" max="2000" value="${escapeAttr(volume)}" required></label>
         </div>
         <div class="feedback-options">
-          <label><input type="checkbox" name="submit_as_evidence"> Add to review queue</label>
+          <label><input type="checkbox" name="submit_as_evidence"> 加入审核队列</label>
         </div>
       </details>
       <div class="feedback-actions">
-        <button type="submit" class="btn btn-primary">Submit correction</button>
+        <button type="submit" class="btn btn-primary">提交修正</button>
         <span class="feedback-status" id="nutrition-feedback-status"></span>
       </div>
     </form>
@@ -782,7 +736,7 @@ async function handleNutritionFeedbackSubmit(form) {
   const sourceNote = form.elements.source_note?.value.trim() || '';
   if (submitAsEvidence && !sourceNote) {
     if (status) {
-      status.textContent = 'Evidence note is required for review queue.';
+      status.textContent = '加入审核队列时需要填写数据来源说明。';
       status.className = 'feedback-status error';
     }
     return;
@@ -804,7 +758,7 @@ async function handleNutritionFeedbackSubmit(form) {
   };
 
   if (status) {
-    status.textContent = 'Submitting...';
+    status.textContent = '提交中...';
     status.className = 'feedback-status';
   }
   form.querySelector('button[type="submit"]')?.setAttribute('disabled', 'true');
@@ -819,13 +773,13 @@ async function handleNutritionFeedbackSubmit(form) {
       renderApp();
     }
     const noticeParts = [];
-    if (payload.apply_to_log) noticeParts.push('This log was updated.');
-    if (data.evidence || payload.submit_as_evidence) noticeParts.push('Feedback added to review queue.');
-    state.lastNutritionResult = buildNutritionResultFromLog(updatedLog, noticeParts.join(' ') || 'Feedback saved');
+    if (payload.apply_to_log) noticeParts.push('这条记录已更新。');
+    if (data.evidence || payload.submit_as_evidence) noticeParts.push('修正已加入审核队列。');
+    state.lastNutritionResult = buildNutritionResultFromLog(updatedLog, noticeParts.join(' ') || '修正已保存。');
     renderNutritionExplainabilityPanel();
   } catch (e) {
     if (status) {
-      status.textContent = e.message || 'Feedback failed';
+      status.textContent = e.message || '修正提交失败';
       status.className = 'feedback-status error';
     }
   } finally {
@@ -843,14 +797,14 @@ function buildNutritionResultFromLog(log, notice = '') {
     caffeine: log.caffeine,
     sugarContent: log.sugarContent,
     confidence: log.confidence,
-    estimation_method: log.estimation_method || 'Unknown',
-    data_source: log.data_source || 'Unknown',
+    estimation_method: log.estimation_method || '未知',
+    data_source: log.data_source || '未知',
     matched_knowledge_id: log.matched_knowledge_id || null,
     retrieval_score: log.retrieval_score ?? null,
     reasoning: normalizeTextList(log.reasoning),
     composition: log.composition || null,
     explainability: log.explainability || {
-      method: log.estimation_method || 'Unknown',
+      method: log.estimation_method || '未知',
       used_composition: false,
       used_knowledge_match: Boolean(log.matched_knowledge_id),
       matched_knowledge_id: log.matched_knowledge_id || null,
@@ -923,7 +877,6 @@ function handleAddDrink() {
   const type = elements.form.querySelector('input[name="drink-type"]:checked')?.value;
   const sugar = elements.form.querySelector('input[name="sugar-level"]:checked')?.value;
   const volume = parseInt(elements.inputVolume.value, 10);
-  let abv = type === 'alcohol' ? inferAlcoholAbv(name) : 0;
   const startTime = elements.inputStartTime.value;
   const endTime = elements.inputEndTime.value;
   const baseSugarOverride = parseFloat(elements.inputBaseSugarOverride.value) || null;
@@ -961,19 +914,10 @@ function handleAddDrink() {
   console.log('volume:', volume);
   console.log('baseSugarOverride:', baseSugarOverride);
   
-  // Perform Calculations
+  // Backend nutrition pipeline will fill caffeine and sugar after the log is saved.
   let caffeine = 0;
   let baseSugarDensity = baseSugarOverride !== null ? baseSugarOverride : 0;
-  
-  if (state.currentDrinkFromDatabase) {
-    const drink = state.currentDrinkFromDatabase;
-    // Override ABV from database if present
-    if (type === 'alcohol' && drink.abv !== undefined) {
-      abv = drink.abv;
-    }
-  }
   const sugarContent = 0;
-  const alcoholContent = calculateAlcohol(volume, abv);
 
   const newLog = {
     id: 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -988,8 +932,6 @@ function handleAddDrink() {
     caffeine,
     sugarContent,
     isCalculating: true, // Optimistic UI flag
-    alcoholContent,
-    abv,
     baseSugarDensity
   };
 
@@ -1118,12 +1060,10 @@ function renderDailyPanel() {
   // Compute Daily Totals
   const totalCaffeine = dateLogs.reduce((sum, l) => sum + l.caffeine, 0);
   const totalSugar = dateLogs.reduce((sum, l) => sum + l.sugarContent, 0);
-  const totalAlcohol = dateLogs.reduce((sum, l) => sum + (l.alcoholContent || 0), 0);
 
   // Render Daily Gauges
   elements.caffeineTotal.textContent = totalCaffeine;
   elements.sugarTotal.textContent = totalSugar.toFixed(1);
-  elements.alcoholTotal.textContent = totalAlcohol.toFixed(1);
 
   // Update SVG rings (circumference = 377)
   const updateRing = (el, val, max) => {
@@ -1140,7 +1080,7 @@ function renderDailyPanel() {
   renderCalendar();
 
   // Run Daily Insights
-  renderDailyInsights(dateLogs, totalCaffeine, totalSugar, totalAlcohol);
+  renderDailyInsights(dateLogs, totalCaffeine, totalSugar);
   fetchDailyAgentInsights(state.selectedDate);
 }
 
@@ -1149,9 +1089,74 @@ function formatConfidence(value) {
   return `${Math.round(confidence * 100)}%`;
 }
 
+function translateExplainabilityLabel(label) {
+  const labels = {
+    source: '\u6765\u6e90',
+    method: '\u65b9\u6cd5',
+    knowledge: '\u77e5\u8bc6\u5e93',
+    retrieval: '\u68c0\u7d22\u5206',
+    trace: '\u8ffd\u8e2a',
+  };
+  return labels[label] || label;
+}
+
+function translateExplainabilityValue(value) {
+  const text = String(value ?? '');
+  const values = {
+    'Composition Estimation Agent': '\u6210\u5206\u4f30\u7b97 Agent',
+    COMPOSITION_ESTIMATION: '\u6210\u5206\u62c6\u89e3\u4f30\u7b97',
+    HYBRID_SQL_EXACT_MATCH_LOCAL: '\u77e5\u8bc6\u5e93\u5339\u914d + \u672c\u5730\u52a8\u6001\u4f30\u7b97',
+    LOCAL_ESTIMATION: '\u672c\u5730\u52a8\u6001\u4f30\u7b97',
+    SQL_EXACT_MATCH: '\u77e5\u8bc6\u5e93\u7cbe\u786e\u5339\u914d',
+  };
+  return values[text] || text;
+}
+
 function formatOptionalMeta(label, value) {
   if (value === undefined || value === null || value === '') return '';
-  return `<span class="explain-chip">${label}: ${value}</span>`;
+  return `<span class="explain-chip">${translateExplainabilityLabel(label)}: ${escapeHtml(translateExplainabilityValue(value))}</span>`;
+}
+
+function translateReasoning(reason) {
+  const text = String(reason ?? '');
+  let match = text.match(/^Estimated espresso caffeine range from ([\d.]+) shot\(s\): ([\d.]+)-([\d.]+)mg, best ([\d.]+)mg\.$/);
+  if (match) {
+    return `\u6309 ${match[1]} \u4efd\u6d53\u7f29\u5496\u5561\u4f30\u7b97\u5496\u5561\u56e0\u8303\u56f4\uff1a${match[2]}-${match[3]} mg\uff0c\u53d6\u4f30\u7b97\u503c ${match[4]} mg\u3002`;
+  }
+
+  match = text.match(/^Included natural sugar range from fruit or beverage base: ([\d.]+)-([\d.]+)g\.$/);
+  if (match) {
+    return `\u5df2\u8ba1\u5165\u679c\u6c41\u6216\u996e\u54c1\u57fa\u5e95\u7684\u5929\u7136\u7cd6\u8303\u56f4\uff1a${match[1]}-${match[2]} g\u3002`;
+  }
+
+  match = text.match(/^Included natural sugar range from ([^:]+): ([\d.]+)-([\d.]+)g\.$/);
+  if (match) {
+    return `\u5df2\u8ba1\u5165 ${translateExplainabilityValue(match[1])} \u7684\u5929\u7136\u7cd6\u8303\u56f4\uff1a${match[2]}-${match[3]} g\u3002`;
+  }
+
+  match = text.match(/^Estimated tea caffeine range from tea base volume: ([\d.]+)-([\d.]+)mg\.$/);
+  if (match) {
+    return `\u6839\u636e\u8336\u5e95\u7528\u91cf\u4f30\u7b97\u5496\u5561\u56e0\u8303\u56f4\uff1a${match[1]}-${match[2]} mg\u3002`;
+  }
+
+  match = text.match(/^Added sugar range adjusted by sweetness level '([^']+)': ([\d.]+)-([\d.]+)g\.$/);
+  if (match) {
+    return `\u6309\u751c\u5ea6\u6863\u4f4d\u201c${getSugarTextCN(match[1])}\u201d\u4f30\u7b97\u989d\u5916\u52a0\u7cd6\u8303\u56f4\uff1a${match[2]}-${match[3]} g\u3002`;
+  }
+
+  if (text === 'Warning: Functional or energy-style naming detected; extra caffeine sources are not modeled without product evidence.') {
+    return '\u63d0\u9192\uff1a\u996e\u54c1\u540d\u79f0\u542b\u529f\u80fd\u6216\u80fd\u91cf\u98ce\u683c\u8868\u8ff0\uff0c\u4f46\u6ca1\u6709\u53ef\u4fe1\u4ea7\u54c1\u8bc1\u636e\u65f6\uff0c\u4e0d\u989d\u5916\u4f30\u7b97\u5176\u4ed6\u5496\u5561\u56e0\u6765\u6e90\u3002';
+  }
+
+  if (text === 'Estimated tea caffeine from tea base volume.') {
+    return '\u6839\u636e\u8336\u5e95\u7528\u91cf\u4f30\u7b97\u5496\u5561\u56e0\u3002';
+  }
+
+  if (text === 'Included natural sugar from fruit or beverage base.') {
+    return '\u5df2\u8ba1\u5165\u679c\u6c41\u6216\u996e\u54c1\u57fa\u5e95\u7684\u5929\u7136\u7cd6\u3002';
+  }
+
+  return text;
 }
 
 function renderReasoningItems(reasoning) {
@@ -1159,9 +1164,9 @@ function renderReasoningItems(reasoning) {
   try {
     const reasons = typeof reasoning === 'string' ? JSON.parse(reasoning) : reasoning;
     const list = Array.isArray(reasons) ? reasons : [String(reasons)];
-    return list.map(r => `<li>${r}</li>`).join('');
+    return list.map(r => `<li>${escapeHtml(translateReasoning(r))}</li>`).join('');
   } catch(e) {
-    return `<li>${reasoning}</li>`;
+    return `<li>${escapeHtml(translateReasoning(reasoning))}</li>`;
   }
 }
 
@@ -1176,7 +1181,7 @@ function renderExplainability(log) {
   return `
     <div class="log-explainability">
       <div class="explain-header">
-        <span>Nutrition pipeline</span>
+        <span>\u8425\u517b\u4f30\u7b97\u6d41\u7a0b</span>
         ${log.confidence !== undefined ? `<strong>${formatConfidence(log.confidence)}</strong>` : ''}
       </div>
       <div class="explain-chips">
@@ -1213,16 +1218,15 @@ function renderDailyLogs(dateLogs) {
     sortedLogs.forEach(log => {
       const typeIcon = getTypeIcon(log.type);
       const sugarText = getSugarTextCN(log.sugar);
-      const alcoholText = log.alcoholContent ? `<div class="log-stat-item"><span class="log-stat-label">估算酒精</span><span class="log-stat-val alcohol-num">${log.alcoholContent} g</span></div>` : '';
 
       const explainabilityBadge = log.explainability
-        ? '<span class="log-explainability-badge is-saved">Explainable</span>'
-        : '<span class="log-explainability-badge is-missing">No reasoning saved</span>';
+        ? '<span class="log-explainability-badge is-saved">\u53ef\u89e3\u91ca</span>'
+        : '<span class="log-explainability-badge is-missing">\u6682\u65e0\u4f30\u7b97\u8bf4\u660e</span>';
 
       const logCard = document.createElement('div');
       logCard.className = `log-card type-${log.type}`;
       logCard.tabIndex = 0;
-      logCard.title = 'View saved nutrition explainability';
+      logCard.title = '\u67e5\u770b\u5df2\u4fdd\u5b58\u7684\u8425\u517b\u4f30\u7b97\u8bf4\u660e';
 
       logCard.innerHTML = `
         <div class="log-card-left">
@@ -1255,7 +1259,6 @@ function renderDailyLogs(dateLogs) {
               <span class="log-stat-label">估算糖分</span>
               <span class="log-stat-val sugar-num">${log.sugarContent} g</span>
             </div>
-            ${alcoholText}
           `}
           <button type="button" class="log-del-btn" title="删除记录">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -1283,7 +1286,7 @@ function renderDailyLogs(dateLogs) {
 }
 
 // Render Daily Advice list
-async function renderDailyInsights(dateLogs, totalCaffeine, totalSugar, totalAlcohol) {
+async function renderDailyInsights(dateLogs, totalCaffeine, totalSugar) {
   elements.insightsList.innerHTML = '<div style="color: #64748b; padding: 20px; text-align: center;">正在由 DrinkMind Agent 生成今日摄入分析...</div>';
   
   if (dateLogs.length === 0) {
@@ -1341,14 +1344,12 @@ function renderWeeklyPanel() {
   // 1. Render Aggregates
   const totalCaffeine = weeklyLogs.reduce((sum, l) => sum + l.caffeine, 0);
   const totalSugar = weeklyLogs.reduce((sum, l) => sum + l.sugarContent, 0);
-  const totalAlcohol = weeklyLogs.reduce((sum, l) => sum + (l.alcoholContent || 0), 0);
 
   // Calculate active tracking days
   const activeDays = new Set(weeklyLogs.map(l => l.date)).size;
 
   elements.weeklyCaffeineTotal.textContent = totalCaffeine;
   elements.weeklySugarTotal.textContent = totalSugar.toFixed(1);
-  elements.weeklyAlcoholTotal.textContent = totalAlcohol.toFixed(1);
   elements.weeklyActiveDays.textContent = activeDays;
 
   // 2. Render SVG Weekly Bar Chart
@@ -1428,8 +1429,7 @@ function getTypeTextCN(type) {
     case 'milktea': return '奶茶';
     case 'fruittea': return '果茶';
     case 'soda': return '汽水';
-    case 'alcohol': return '酒精';
-    default: return '其他';
+        default: return '其他';
   }
 }
 
@@ -1441,18 +1441,8 @@ function getTypeIcon(type) {
     case 'milktea': return '🧋';
     case 'fruittea': return '🍋';
     case 'soda': return '🥤';
-    case 'alcohol': return '🍺';
-    default: return '🥤';
+        default: return '🥤';
   }
-}
-
-function inferAlcoholAbv(name) {
-  const lower = (name || '').toLowerCase();
-  if (lower.includes('啤酒') || lower.includes('beer')) return 4.0;
-  if (lower.includes('葡萄酒') || lower.includes('wine') || lower.includes('红酒')) return 12.0;
-  if (lower.includes('鸡尾酒') || lower.includes('cocktail') || lower.includes('莫吉托')) return 12.0;
-  if (lower.includes('威士忌') || lower.includes('whisky') || lower.includes('伏特加') || lower.includes('vodka')) return 40.0;
-  return 5.0;
 }
 
 function shiftMonth(monthStr, delta) {
@@ -1606,26 +1596,6 @@ function renderHotDrinks() {
   });
 }
 
-function updateDrinkCalculationDisplay() {
-  if (!state.currentDrinkFromDatabase) return;
-  
-  const drink = state.currentDrinkFromDatabase;
-  const volume = parseInt(elements.inputVolume.value, 10) || drink.defaultVolume;
-  
-  const sugarLevel = elements.form.querySelector('input[name="sugar-level"]:checked')?.value || 'none';
-  const multiplier = sugarLevel === 'none' ? 0 : 
-                     sugarLevel === 'three' ? 0.3 :
-                     sugarLevel === 'half' ? 0.5 :
-                     sugarLevel === 'seven' ? 0.7 : 1.0;
-  
-  const addedSugar = drink.baseSugar * multiplier;
-  const totalSugar = drink.baseSugar + addedSugar;
-  
-  const caffeine = Math.round((drink.caffeine * volume) / drink.defaultVolume);
-}
-
-// ==========================================
-
 // ==========================================
 // Agent Analytics Interaction
 // ==========================================
@@ -1664,7 +1634,6 @@ async function triggerAgentAnalysis(logData) {
           const dateLogs = state.logs.filter(l => l.date === state.selectedDate);
           const tc = dateLogs.reduce((s, l) => s + l.caffeine, 0);
           const ts = dateLogs.reduce((s, l) => s + l.sugarContent, 0);
-          const ta = dateLogs.reduce((s, l) => s + (l.alcoholContent || 0), 0);
           
           const elCaf = document.getElementById('caffeine-total');
           const elSug = document.getElementById('sugar-total');
@@ -1682,7 +1651,7 @@ async function triggerAgentAnalysis(logData) {
           renderDailyLogs(dateLogs);
           
           // Refresh the daily insights report and weekly panel to reflect the new drink!
-          renderDailyInsights(dateLogs, tc, ts, ta);
+          renderDailyInsights(dateLogs, tc, ts);
           if (state.activeTab === 'tab-daily') {
               renderWeeklyPanel();
           }
@@ -1794,5 +1763,4 @@ async function saveSleepData(date, hours) {
     alert('保存睡眠数据失败，请检查后端是否开启。');
   }
 }
-
 

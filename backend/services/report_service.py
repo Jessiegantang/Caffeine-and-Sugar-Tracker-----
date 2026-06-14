@@ -1,6 +1,5 @@
 import datetime
 
-from agents.health_plan_agent import get_active_plan, plan_progress_summary
 from agents.report_agent import generate_health_report
 from db.database import DrinkLog
 
@@ -26,9 +25,6 @@ def get_weekly_report(db, date: str) -> dict:
             DrinkLog.status == 'active',
         ).all()
         logs = [serialize_drink_log(record) for record in records_db]
-        report = generate_health_report(logs, "周度")
-        active_plan = get_active_plan(db)
-        report["active_plan_progress"] = plan_progress_summary(active_plan)
-        return report
+        return generate_health_report(logs, "周度")
     except Exception:
         return {"insights": []}

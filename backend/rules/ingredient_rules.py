@@ -56,6 +56,7 @@ def add_ranges(ranges: list[RangeEstimate], unit: str) -> RangeEstimate:
 ESPRESSO_CAFFEINE_MG_PER_SHOT = make_range(55.0, 85.0, 70.0, "mg")
 MILK_SUGAR_G_PER_100ML = make_range(4.5, 5.5, 5.0, "g")
 COCONUT_MILK_SUGAR_G_PER_100ML = make_range(6.0, 10.0, 8.0, "g")
+COCONUT_WATER_SUGAR_G_PER_100ML = make_range(3.5, 5.5, 4.5, "g")
 OAT_MILK_SUGAR_G_PER_100ML = make_range(3.0, 6.0, 4.5, "g")
 MILK_TEA_CAFFEINE_MG_PER_100ML = make_range(15.0, 35.0, 25.0, "mg")
 FRUIT_TEA_CAFFEINE_MG_PER_100ML = make_range(4.0, 14.0, 8.0, "mg")

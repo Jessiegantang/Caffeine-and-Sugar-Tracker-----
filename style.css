@@ -848,18 +848,6 @@ header {
   font-weight: 700;
 }
 
-.agent-plan-create {
-  display: flex;
-  gap: 0.45rem;
-  margin-bottom: 0.65rem;
-}
-
-.agent-plan-create input {
-  min-width: 0;
-  height: 2.1rem;
-  font-size: 0.8rem;
-}
-
 .agent-small-btn,
 .agent-icon-btn {
   height: 2.1rem;
@@ -912,36 +900,6 @@ header {
   background: var(--bg-card);
   color: var(--text-primary);
   line-height: 1.45;
-}
-
-.agent-plan-days {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.plan-day-pill {
-  width: 1.45rem;
-  height: 1.45rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.plan-day-pill.status-completed {
-  border-color: var(--color-success);
-  color: var(--color-success);
-}
-
-.plan-day-pill.status-in_progress {
-  border-color: var(--caffeine-primary);
-  background: rgba(47, 143, 131, 0.1);
-  color: var(--caffeine-primary);
 }
 
 .trace-stack {
@@ -2486,6 +2444,39 @@ body {
   overflow-wrap: anywhere;
 }
 
+.chat-parse-hint {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.chat-add-log-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--caffeine-gradient);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px var(--caffeine-glow);
+}
+
+.chat-add-log-btn:hover {
+  filter: brightness(1.03);
+}
+
+.chat-add-log-btn:disabled {
+  cursor: default;
+  opacity: 0.72;
+  filter: none;
+}
+
 .chat-structured-details {
   margin-top: 8px;
 }
@@ -2631,10 +2622,6 @@ body {
   .weekly-aggregates-grid,
   .db-stats-grid {
     grid-template-columns: 1fr;
-  }
-
-  .agent-plan-create {
-    flex-direction: column;
   }
 
   .gauge-card {

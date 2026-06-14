@@ -15,8 +15,6 @@ class DrinkInput(BaseModel):
     endTime: str
     caffeine: float
     sugarContent: float
-    alcoholContent: float = None
-    abv: float = None
     baseSugarDensity: float = None
     status: str = "active"
     data_source: str = "用户录入"
@@ -63,7 +61,6 @@ class KnowledgeInput(BaseModel):
     volume: int = 500
     caffeine: float = 0.0
     baseSugar: float = 0.0
-    abv: float = 0.0
     source: str = "前端数据库"
     confidence: float = 0.9
 
@@ -102,8 +99,3 @@ class ChatInput(BaseModel):
 class AgentActInput(BaseModel):
     date: str
     message: str
-
-
-class HealthPlanInput(BaseModel):
-    date: str
-    goal: str

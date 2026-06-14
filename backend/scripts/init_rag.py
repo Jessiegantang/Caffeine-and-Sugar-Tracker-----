@@ -63,7 +63,6 @@ def init_knowledge_base():
                 volume=item.get("volume", item.get("defaultVolume", 500)),
                 caffeine=item.get("caffeine_mg", item.get("caffeine", 0.0)),
                 baseSugar=item.get("sugar_g", item.get("baseSugar", 0.0)),
-                abv=item.get("abv", 0.0),
                 source=item.get("source", "系统预设权威数据"),
                 confidence=item.get("confidence", 0.95),
             )

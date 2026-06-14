@@ -37,8 +37,6 @@ def _knowledge_scope(source: str | None) -> str:
         return "caffeine_only"
     if "sugar_only" in source:
         return "sugar_only"
-    if "alcohol_only" in source:
-        return "alcohol_only"
     if "partial" in source:
         return "partial"
     return "complete"
@@ -93,8 +91,6 @@ def _knowledge_field_known(scope: str, field_name: str, value=None) -> bool:
         return field_name == "caffeine"
     if scope == "sugar_only":
         return field_name == "sugar"
-    if scope == "alcohol_only":
-        return field_name == "abv"
     if scope == "partial":
         return value is not None and float(value or 0) > 0
     return False

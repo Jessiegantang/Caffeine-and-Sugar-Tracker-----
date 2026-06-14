@@ -3,8 +3,8 @@ import uuid
 
 from agents.companion_agent import generate_companion_response
 from agents.intake_parser import parse_intake_message
-from agents.memory_agent import apply_memory_updates, extract_memory_updates
 from db.database import ChatLog, DrinkLog, SleepRecord
+from services.memory_service import apply_memory_updates, extract_memory_updates
 from services.trace_service import save_agent_trace
 
 

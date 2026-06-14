@@ -1,4 +1,4 @@
-const API_BASE = 'http://127.0.0.1:8000';
+﻿const API_BASE = 'http://127.0.0.1:8000';
 
 let database = null;
 
@@ -9,7 +9,6 @@ export const TYPE_DEFINITIONS = {
   milktea: { label: '🧋 奶茶', description: '茶与牛奶/奶精混合饮品。通常含有较多糖分。' },
   fruittea: { label: '🍋 果茶', description: '水果与茶混合饮品。含有水果本身的糖分。' },
   soda: { label: '🥤 汽水', description: '碳酸饮料。通常含有大量添加糖。' },
-  alcohol: { label: '🍺 酒精', description: '含酒精饮品。啤酒通常含糖量较低，鸡尾酒可能含糖较高。' }
 };
 
 // Map backend DB structure to frontend Category structure
@@ -21,7 +20,6 @@ function convertListToDict(dbLogs) {
     milktea: { category: '奶茶', items: [] },
     fruittea: { category: '果茶', items: [] },
     soda: { category: '汽水', items: [] },
-    alcohol: { category: '酒精饮品', items: [] }
   };
   
   for (const log of dbLogs) {
@@ -35,7 +33,6 @@ function convertListToDict(dbLogs) {
       caffeine: log.caffeine,
       baseSugar: log.baseSugar,
       defaultVolume: log.volume,
-      abv: log.abv || 0,
       source: log.source,
       confidence: log.confidence
     });
@@ -103,7 +100,6 @@ export async function addDrink(type, drinkData) {
     volume: drinkData.defaultVolume || 500,
     caffeine: drinkData.caffeine || 0,
     baseSugar: drinkData.baseSugar || 0,
-    abv: drinkData.abv || 0,
     source: "用户自建知识库",
     confidence: 0.95
   };
@@ -117,7 +113,6 @@ export async function addDrink(type, drinkData) {
     caffeine: payload.caffeine,
     baseSugar: payload.baseSugar,
     defaultVolume: payload.volume,
-    abv: payload.abv
   });
 
   try {
@@ -153,7 +148,6 @@ export async function updateDrink(drinkId, drinkData) {
       volume: drinkData.defaultVolume || 500,
       caffeine: drinkData.caffeine || 0,
       baseSugar: drinkData.baseSugar || 0,
-      abv: drinkData.abv || 0,
       source: "用户自建知识库",
       confidence: 0.95
     };

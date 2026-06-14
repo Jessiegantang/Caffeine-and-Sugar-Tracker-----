@@ -1,4 +1,4 @@
-from agents.memory_agent import clear_user_memory, read_user_memory
+from services.memory_service import clear_user_memory, read_user_memory
 
 
 def get_user_preferences(db) -> dict:

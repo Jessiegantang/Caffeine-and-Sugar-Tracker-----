@@ -1,5 +1,6 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, Date, Time, Boolean, text
+from pathlib import Path
+from sqlalchemy import create_engine, Column, Integer, String, Float
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
@@ -18,12 +19,10 @@ class DrinkLog(Base):
     endTime = Column(String) # HH:MM
     caffeine = Column(Float)
     sugarContent = Column(Float)
-    alcoholContent = Column(Float, nullable=True)
-    abv = Column(Float, nullable=True)
     baseSugarDensity = Column(Float, nullable=True)
     # New fields for Agent system upgrade
     status = Column(String, default='active')
-    data_source = Column(String, default='用户录入')
+    data_source = Column(String, default='user_input')
     confidence = Column(Float, default=1.0)
     reasoning = Column(String, nullable=True)
     estimation_method = Column(String, nullable=True)
@@ -45,8 +44,7 @@ class DrinkKnowledge(Base):
     volume = Column(Integer, default=500)
     caffeine = Column(Float, default=0.0)
     baseSugar = Column(Float, default=0.0)
-    abv = Column(Float, default=0.0)
-    source = Column(String, default="系统预设")
+    source = Column(String, default='system_preset')
     confidence = Column(Float, default=0.9)
     created_at = Column(String, default=lambda: datetime.datetime.now().isoformat())
     updated_at = Column(String, default=lambda: datetime.datetime.now().isoformat())
@@ -65,19 +63,6 @@ class ChatLog(Base):
     role = Column(String) # 'user' or 'assistant'
     content = Column(String)
     timestamp = Column(String) # ISO 8601 string
-
-class HealthPlan(Base):
-    __tablename__ = 'health_plans'
-
-    id = Column(String, primary_key=True, index=True)
-    target = Column(String)  # e.g., 'reduce_caffeine', 'reduce_sugar'
-    status = Column(String, default='active')  # 'active', 'completed', 'abandoned'
-    total_days = Column(Integer, default=7)
-    current_day = Column(Integer, default=1)
-    start_date = Column(String) # YYYY-MM-DD
-    plan_content = Column(String) # JSON string of the plan
-    created_at = Column(String, default=lambda: datetime.datetime.now().isoformat())
-    updated_at = Column(String, default=lambda: datetime.datetime.now().isoformat())
 
 class UserPreference(Base):
     __tablename__ = 'user_preferences'
@@ -131,7 +116,8 @@ class NutritionEvidence(Base):
     status = Column(String, default="pending_review", index=True)
     created_at = Column(String, default=lambda: datetime.datetime.now().isoformat(), index=True)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./drinks.db")
+DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "drinks.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}")
 
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}
@@ -139,51 +125,10 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def auto_migrate_db():
-    """Auto migrate sqlite database to add new columns if missing."""
-    try:
-        with engine.connect() as conn:
-            # Check if columns exist
-            result = conn.execute(text("PRAGMA table_info(drink_logs)")).fetchall()
-            columns = [row[1] for row in result]
-            
-            if 'status' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN status VARCHAR DEFAULT 'active'"))
-                print("Migrated DB: Added 'status' column.")
-            if 'data_source' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN data_source VARCHAR DEFAULT '用户录入'"))
-                print("Migrated DB: Added 'data_source' column.")
-            if 'confidence' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN confidence FLOAT DEFAULT 1.0"))
-                print("Migrated DB: Added 'confidence' column.")
-            if 'reasoning' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN reasoning VARCHAR"))
-                print("Migrated DB: Added 'reasoning' column.")
-            if 'estimation_method' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN estimation_method VARCHAR"))
-                print("Migrated DB: Added 'estimation_method' column.")
-            if 'matched_knowledge_id' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN matched_knowledge_id VARCHAR"))
-                print("Migrated DB: Added 'matched_knowledge_id' column.")
-            if 'retrieval_score' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN retrieval_score FLOAT"))
-                print("Migrated DB: Added 'retrieval_score' column.")
-            if 'agent_trace_id' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN agent_trace_id VARCHAR"))
-                print("Migrated DB: Added 'agent_trace_id' column.")
-            if 'composition_json' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN composition_json VARCHAR"))
-                print("Migrated DB: Added 'composition_json' column.")
-            if 'explainability_json' not in columns:
-                conn.execute(text("ALTER TABLE drink_logs ADD COLUMN explainability_json VARCHAR"))
-                print("Migrated DB: Added 'explainability_json' column.")
-            conn.commit()
-    except Exception as e:
-        print(f"Auto-migration failed: {e}")
-
 def init_db():
-    Base.metadata.create_all(bind=engine)
-    auto_migrate_db()
+    # Schema changes are managed by Alembic. Run:
+    #   venv\Scripts\python.exe -m alembic upgrade head
+    return None
 
 def get_db():
     db = SessionLocal()

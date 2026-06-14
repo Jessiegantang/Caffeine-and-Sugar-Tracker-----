@@ -1,4 +1,4 @@
-import datetime
+﻿import datetime
 import base64
 import json
 import os
@@ -33,7 +33,6 @@ TYPE_KEYWORDS = {
     "fruittea": ["果茶", "柠檬茶", "葡萄", "桃", "芒果", "fruit tea"],
     "tea": ["绿茶", "红茶", "乌龙", "茶"],
     "soda": ["气泡", "汽水", "soda"],
-    "alcohol": ["啤酒", "鸡尾酒", "酒", "beer", "cocktail"],
 }
 
 
@@ -115,10 +114,6 @@ def approve_evidence_to_knowledge(db, evidence_id: str) -> DrinkKnowledge:
         kb.baseSugar = round(float(extracted.get("sugar")) * volume_ratio, 1)
     elif not duplicate:
         kb.baseSugar = 0.0
-    if extracted.get("abv") is not None:
-        kb.abv = float(extracted.get("abv"))
-    elif not duplicate:
-        kb.abv = 0.0
     kb.source = f"reviewed:{evidence.source_type}:{merged_scope}"
     new_confidence = adjust_confidence_for_scope(float(evidence.confidence or 0.5), extracted)
     kb.confidence = min(max(float(kb.confidence or 0.0), new_confidence), 0.95)
@@ -160,9 +155,9 @@ def analyze_image_with_vision(image_bytes: bytes, content_type: str, filename: s
             SystemMessage(content=(
                 "You are DrinkMind Image Evidence Agent. Extract beverage nutrition evidence from a user-uploaded image. "
                 "The image may contain one product or many products. Return strict JSON only. "
-                "Do not invent missing values. Use null for unknown volume, caffeine, sugar, or abv. "
-                "For each item include: brand, name, type, volume, caffeine, sugar, abv, volume_note, raw_evidence, confidence. "
-                "type must be one of coffee, teacoffee, tea, milktea, fruittea, soda, alcohol. "
+                "Do not invent missing values. Use null for unknown volume, caffeine, or sugar. "
+                "For each item include: brand, name, type, volume, caffeine, sugar, volume_note, raw_evidence, confidence. "
+                "type must be one of coffee, teacoffee, tea, milktea, fruittea, soda. "
                 "If the image is a caffeine table, return one item per visible row. "
                 "Important layout rule: many Chinese beverage tables have two independent product/value column groups, "
                 "for example left name+mg and right name+mg. Scan all columns from top to bottom, left group and right group, "
@@ -213,7 +208,6 @@ def normalize_image_items(items: list[dict], default_brand: str | None = None) -
             "volume": _safe_float(item.get("volume")),
             "caffeine": _safe_float(item.get("caffeine")),
             "sugar": _safe_float(item.get("sugar")),
-            "abv": _safe_float(item.get("abv")),
         }
         normalized.append({
             "brand": brand,
@@ -265,7 +259,7 @@ def parse_candidate_from_text(text: str) -> dict:
     cleaned = text
     for alias in BRAND_ALIASES:
         cleaned = re.sub(re.escape(alias), "", cleaned, flags=re.IGNORECASE)
-    name_match = re.search(r"([\u4e00-\u9fa5A-Za-z0-9]+(?:拿铁|美式|奶茶|果茶|柠檬茶|咖啡|茶|气泡水|啤酒))", cleaned)
+    name_match = re.search(r"([\u4e00-\u9fa5A-Za-z0-9]+(?:拿铁|美式|奶茶|果茶|柠檬茶|咖啡|茶|气泡水))", cleaned)
     name = name_match.group(1) if name_match else ""
     return {
         "brand": normalize_brand(brand),
@@ -280,7 +274,6 @@ def extract_nutrition_fields(raw_text: str) -> dict:
         "volume": _extract_number(text, [r"(\d+(?:\.\d+)?)\s*ml", r"容量\s*:?\s*(\d+(?:\.\d+)?)"]),
         "caffeine": _extract_number(text, [r"咖啡因\s*:?\s*(\d+(?:\.\d+)?)\s*mg", r"caffeine\s*:?\s*(\d+(?:\.\d+)?)\s*mg"]),
         "sugar": _extract_number(text, [r"糖分\s*:?\s*(\d+(?:\.\d+)?)\s*g", r"糖\s*:?\s*(\d+(?:\.\d+)?)\s*g", r"sugar\s*:?\s*(\d+(?:\.\d+)?)\s*g"]),
-        "abv": _extract_number(text, [r"酒精度\s*:?\s*(\d+(?:\.\d+)?)\s*%", r"abv\s*:?\s*(\d+(?:\.\d+)?)\s*%"]),
     }
 
 
@@ -292,24 +285,19 @@ def item_to_evidence_text(item: dict) -> str:
         parts.append(f"咖啡因: {item.get('caffeine')}mg")
     if item.get("sugar") is not None:
         parts.append(f"糖分: {item.get('sugar')}g")
-    if item.get("abv") is not None:
-        parts.append(f"酒精度: {item.get('abv')}%")
     return " ".join(str(part) for part in parts if part)
 
 
 def nutrition_scope(extracted: dict) -> str:
     has_caffeine = extracted.get("caffeine") is not None
     has_sugar = extracted.get("sugar") is not None
-    has_abv = extracted.get("abv") is not None
-    if has_caffeine and not has_sugar and not has_abv:
+    if has_caffeine and not has_sugar:
         return "caffeine_only"
-    if has_sugar and not has_caffeine and not has_abv:
+    if has_sugar and not has_caffeine:
         return "sugar_only"
-    if has_abv and not has_caffeine and not has_sugar:
-        return "alcohol_only"
     if has_caffeine and has_sugar:
         return "caffeine_sugar"
-    if has_caffeine or has_sugar or has_abv:
+    if has_caffeine or has_sugar:
         return "partial"
     return "unknown"
 
@@ -318,7 +306,7 @@ def merge_nutrition_scopes(existing_source: str | None, extracted: dict) -> str:
     fields = set()
     existing = existing_source or ""
     has_existing_scope = any(scope in existing for scope in [
-        "complete", "caffeine_sugar", "caffeine_only", "sugar_only", "alcohol_only", "partial", "unknown"
+        "complete", "caffeine_sugar", "caffeine_only", "sugar_only", "partial", "unknown"
     ])
     if existing_source and not has_existing_scope:
         fields.update(["caffeine", "sugar"])
@@ -328,15 +316,11 @@ def merge_nutrition_scopes(existing_source: str | None, extracted: dict) -> str:
         fields.add("caffeine")
     if "sugar_only" in existing:
         fields.add("sugar")
-    if "alcohol_only" in existing:
-        fields.add("abv")
 
     if extracted.get("caffeine") is not None:
         fields.add("caffeine")
     if extracted.get("sugar") is not None:
         fields.add("sugar")
-    if extracted.get("abv") is not None:
-        fields.add("abv")
 
     if {"caffeine", "sugar"}.issubset(fields):
         return "caffeine_sugar"
@@ -344,8 +328,6 @@ def merge_nutrition_scopes(existing_source: str | None, extracted: dict) -> str:
         return "caffeine_only"
     if fields == {"sugar"}:
         return "sugar_only"
-    if fields == {"abv"}:
-        return "alcohol_only"
     if fields:
         return "partial"
     return "unknown"
@@ -353,7 +335,7 @@ def merge_nutrition_scopes(existing_source: str | None, extracted: dict) -> str:
 
 def adjust_confidence_for_scope(confidence: float, extracted: dict) -> float:
     scope = nutrition_scope(extracted)
-    if scope in {"caffeine_only", "sugar_only", "alcohol_only"}:
+    if scope in {"caffeine_only", "sugar_only"}:
         return max(0.1, confidence - 0.08)
     if scope == "unknown":
         return max(0.1, confidence - 0.2)
@@ -371,7 +353,7 @@ def score_evidence(source_type: str, extracted: dict, raw_text: str) -> float:
         "nutrition_label_image": 0.82,
         "community_screenshot": 0.55,
     }.get(source_type, 0.5)
-    fields = sum(1 for key in ["volume", "caffeine", "sugar", "abv"] if extracted.get(key) is not None)
+    fields = sum(1 for key in ["volume", "caffeine", "sugar"] if extracted.get(key) is not None)
     if fields >= 3:
         base += 0.08
     elif fields >= 2:
@@ -469,8 +451,6 @@ def _format_raw_evidence(item: dict) -> str:
         fields.append(f"咖啡因 {item.get('caffeine')}mg")
     if item.get("sugar") is not None:
         fields.append(f"糖分 {item.get('sugar')}g")
-    if item.get("abv") is not None:
-        fields.append(f"酒精度 {item.get('abv')}%")
     return " ".join(fields)
 
 
@@ -483,4 +463,4 @@ def _extract_number(text: str, patterns: list[str]):
 
 
 def _has_minimum_nutrition(extracted: dict) -> bool:
-    return extracted.get("caffeine") is not None or extracted.get("sugar") is not None or extracted.get("abv") is not None
+    return extracted.get("caffeine") is not None or extracted.get("sugar") is not None

@@ -11,6 +11,7 @@ from typing import Any
 
 from .ingredient_rules import (
     COCONUT_MILK_SUGAR_G_PER_100ML,
+    COCONUT_WATER_SUGAR_G_PER_100ML,
     ESPRESSO_CAFFEINE_MG_PER_SHOT,
     FRUIT_BASE_SUGAR_G_PER_100ML,
     FRUIT_TEA_CAFFEINE_MG_PER_100ML,
@@ -36,7 +37,7 @@ def decompose_drink(drink: dict) -> dict:
     name = str(drink.get("name") or "").strip()
     raw_type = str(drink.get("type") or "").strip().lower()
     volume = _safe_volume(drink.get("volume"))
-    text = f"{brand} {name} {raw_type}".lower()
+    text = f"{brand} {name}".lower()
     sugar_level = _normalize_sugar_level(drink.get("sugar"))
 
     drink_type = _infer_drink_type(text, raw_type)
@@ -76,8 +77,40 @@ def decompose_drink(drink: dict) -> dict:
         warnings.append("Sweetness level is unknown; using half-sugar added sweetener assumption.")
         uncertainty_drivers.append("Sweetness level is unknown, so added syrup is estimated from a half-sugar assumption.")
         composition["confidence"] -= 0.12
+    if any(token in text for token in ["超燃", "能量", "energy"]):
+        warnings.append("Functional or energy-style naming detected; extra caffeine sources are not modeled without product evidence.")
+        uncertainty_drivers.append("Functional drink naming may imply extra active ingredients, but no verified product evidence was available.")
+        composition["confidence"] -= 0.08
 
-    if drink_type == "coconut_latte":
+    if drink_type == "coconut_americano":
+        shots = _coffee_shots(volume, style="americano")
+        coconut_ml = _remaining_milk_volume(volume, shots, fill_ratio=0.78)
+        composition.update({
+            "coffee_base": "espresso",
+            "espresso_shots": shots,
+            "fruit_base": "coconut_water_base",
+            "fruit_base_volume_ml": coconut_ml,
+            "syrup_pumps": _syrup_pumps(volume, drink_type, sugar_level),
+        })
+        natural_sources.append("coconut_water_base")
+        assumptions.append("Coconut americano is modeled as espresso plus coconut water or coconut beverage base.")
+        uncertainty_drivers.append("Espresso caffeine varies by shot size and extraction.")
+        uncertainty_drivers.append("Coconut beverage sugar varies by brand recipe and base volume.")
+    elif drink_type == "fruit_americano":
+        shots = _coffee_shots(volume, style="americano")
+        fruit_ml = round(volume * 0.45, 1)
+        composition.update({
+            "coffee_base": "espresso",
+            "espresso_shots": shots,
+            "fruit_base": "fruit_or_juice_base",
+            "fruit_base_volume_ml": fruit_ml,
+            "syrup_pumps": _syrup_pumps(volume, drink_type, sugar_level),
+        })
+        natural_sources.append("fruit_or_juice_base")
+        assumptions.append("Fruit americano is modeled as espresso plus a fruit or juice base.")
+        uncertainty_drivers.append("Espresso caffeine varies by shot size and extraction.")
+        uncertainty_drivers.append("Fruit or juice base sugar varies by fruit type, puree concentration, and brand recipe.")
+    elif drink_type == "coconut_latte":
         shots = _coffee_shots(volume, style="milk")
         milk_ml = _remaining_milk_volume(volume, shots, fill_ratio=0.72)
         composition.update({
@@ -260,7 +293,7 @@ def estimate_from_composition(composition: dict) -> dict:
     fruit_ml = float(composition.get("fruit_base_volume_ml") or 0)
     fruit_base = composition.get("fruit_base")
     if fruit_ml > 0:
-        sugar_density = FRUIT_BASE_SUGAR_G_PER_100ML
+        sugar_density = _fruit_sugar_density(str(fruit_base or "fruit_base"))
         caffeine_range = zero_range("mg")
         caffeine_ranges.append(caffeine_range)
         sugar_range = scale_range(sugar_density, fruit_ml, divisor=100.0)
@@ -274,7 +307,7 @@ def estimate_from_composition(composition: dict) -> dict:
             sugar_range_g=sugar_range,
             basis=(
                 f"{sugar_density['min']:g}-{sugar_density['max']:g}g sugar per 100ml "
-                f"fruit or juice base, best {sugar_density['best']:g}g"
+                f"{_fruit_basis_label(str(fruit_base or 'fruit_base'))}, best {sugar_density['best']:g}g"
             ),
             confidence=0.62 if composition.get("drink_type") == "unknown" else 0.70,
         ))
@@ -357,23 +390,48 @@ def estimate_composition_nutrition(drink: dict) -> dict:
 
 
 def _infer_drink_type(text: str, raw_type: str) -> str:
-    if any(token in text for token in ["sheng ye", "raw coconut", "coconut latte", "coconut milk latte", "coconut"]):
+    has_coconut = _has_any(text, [
+        "生椰", "椰青", "椰子", "椰乳", "椰水", "椰",
+        "sheng ye", "raw coconut", "coconut",
+    ])
+    has_fruit = _has_any(text, [
+        "果咖", "果汁", "果萃", "鲜果", "水果",
+        "橙", "橙子", "橙c", "橙C", "柚", "西柚", "葡萄柚", "柠", "柠檬",
+        "桑葚", "桑椹", "桑果", "葡萄", "莓", "草莓", "蓝莓", "树莓", "覆盆子",
+        "桃", "黄桃", "白桃", "芒果", "百香果", "杨梅", "荔枝", "苹果",
+        "凤梨", "菠萝", "青提", "红提",
+        "orange", "grapefruit", "lemon", "lime", "mulberry", "grape",
+        "berry", "strawberry", "blueberry", "raspberry", "peach", "mango",
+        "passion fruit", "pineapple", "apple", "juice", "fruit",
+    ])
+    has_americano = _has_any(text, ["美式", "americano", "cold brew", "coldbrew", "mei shi"])
+    has_latte = _has_any(text, ["拿铁", "拿鐵", "latte", "na tie"])
+    has_coffee = _has_any(text, ["咖啡", "coffee"])
+    if has_coconut and has_americano:
+        return "coconut_americano"
+    if has_coconut:
         return "coconut_latte"
+    if has_fruit and (has_americano or has_coffee or raw_type == "coffee"):
+        return "fruit_americano"
     if any(token in text for token in ["yan mai", "oat latte", "oatmilk", "oat milk"]):
         return "oat_latte"
-    if any(token in text for token in ["mei shi", "americano", "cold brew", "coldbrew"]):
+    if has_americano:
         return "americano"
-    if any(token in text for token in ["na tie", "latte"]):
+    if has_latte:
         return "latte"
     if raw_type in {"milktea", "milk_tea"} or any(token in text for token in ["nai cha", "milk tea"]):
         return "milk_tea"
     if raw_type == "fruittea" or any(token in text for token in ["shui guo cha", "guo cha", "ning meng cha", "fruit tea", "juice tea"]):
         return "fruit_tea"
     if raw_type == "coffee":
-        return "americano" if "coffee" in text else "latte"
+        return "americano" if has_americano else "latte"
     if raw_type == "tea":
         return "fruit_tea" if "fruit" in text else "milk_tea"
     return "unknown"
+
+
+def _has_any(text: str, tokens: list[str]) -> bool:
+    return any(token.lower() in text for token in tokens)
 
 
 def _normalize_sugar_level(value: Any) -> str:
@@ -422,7 +480,7 @@ def _remaining_milk_volume(volume: int, shots: float, fill_ratio: float) -> floa
 def _syrup_pumps(volume: int, drink_type: str, sugar_level: str) -> float:
     if sugar_level == "none":
         return 0.0
-    if drink_type == "americano":
+    if drink_type in {"americano", "coconut_americano", "fruit_americano"}:
         return 1.0 if sugar_level not in {"unknown", "none"} else 0.0
     if drink_type in {"latte", "oat_latte", "coconut_latte"}:
         return 2.0 if volume >= 450 else 1.0
@@ -439,6 +497,18 @@ def _milk_sugar_density(milk_base: str) -> RangeEstimate:
     if "oat" in milk_base:
         return OAT_MILK_SUGAR_G_PER_100ML
     return MILK_SUGAR_G_PER_100ML
+
+
+def _fruit_sugar_density(fruit_base: str) -> RangeEstimate:
+    if "coconut" in fruit_base:
+        return COCONUT_WATER_SUGAR_G_PER_100ML
+    return FRUIT_BASE_SUGAR_G_PER_100ML
+
+
+def _fruit_basis_label(fruit_base: str) -> str:
+    if "coconut" in fruit_base:
+        return "coconut water or coconut beverage base"
+    return "fruit or juice base"
 
 
 def _component(

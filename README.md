@@ -52,6 +52,18 @@ copy backend\.env.example backend\.env
 Then edit `backend\.env` and set any API keys you want to use. Do not commit
 `.env`.
 
+For browser API access, set `CORS_ALLOW_ORIGINS` to the comma-separated frontend
+origins that should be allowed. Local development defaults to
+`http://localhost:5173,http://127.0.0.1:5173`; production should use the real
+frontend domain and should not use `*`.
+
+Apply database migrations:
+
+```bash
+cd backend
+venv\Scripts\python.exe -m alembic upgrade head
+```
+
 Initialize the local knowledge base:
 
 ```bash
@@ -105,11 +117,11 @@ cd backend
 venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-Run only the nutrition agent tests:
+Run only the nutrition estimation service tests:
 
 ```powershell
 cd backend
-venv\Scripts\python.exe -m unittest tests.test_nutrition_agent
+venv\Scripts\python.exe -m unittest tests.test_nutrition_estimation_service
 ```
 
 Run the Composition Estimation eval:
@@ -173,18 +185,16 @@ The frontend keeps this product-facing: users see an Estimate Result first.
 Technical details such as LangGraph workflow, retrieval score, raw reasoning,
 component lists, and verification remain available but folded by default.
 
-## Demo Flow
-
-See `docs/demo_script.md` for a complete executable demo:
+## Suggested Demo Flow
 
 1. Start backend and frontend.
-2. Log a coconut latte and show Composition Estimation.
+2. Log a drink without an exact reviewed knowledge match and show Composition Estimation.
 3. Open the Estimate Result panel and expand technical details if needed.
 4. Replay saved explainability from a historical log.
 5. Submit nutrition feedback.
 6. Review the generated feedback evidence.
 7. Approve evidence into the knowledge base.
-8. Log the same drink again and show `SQL_EXACT_MATCH` priority.
+8. Log the same drink again and show reviewed knowledge priority.
 9. Run the quality gate.
 
 ## Project Structure
@@ -194,12 +204,12 @@ backend/
   main.py                         FastAPI app bootstrap and router registration
   api/                            API schemas and routers
   services/                       Business services called by routers
+    nutrition_estimation_service.py Parsed drink to nutrition pipeline adapter
+    memory_service.py              User preference memory
   db/
     database.py                   SQLAlchemy models, session, and lightweight migrations
   agents/
-    nutrition_agent.py            Orchestrator-facing nutrition boundary
     orchestrator.py               LangGraph agent routing
-    memory_agent.py               User preference memory
     health_plan_agent.py          7-day plan generation and progress
   rules/                          Deterministic nutrition and risk rules
   knowledge/                      Knowledge lookup, Chroma/RAG, and acquisition
@@ -208,10 +218,7 @@ backend/
   tests/                          Unit tests and composition eval fixtures
 
 docs/
-  architecture.md                 Current implementation architecture
-  composition_eval.md             Eval design and coverage
-  feedback_loop.md                Human Feedback Loop details
-  demo_script.md                  End-to-end demo flow
+  项目七层架构.md                 Current implementation architecture
 
 src/
   components/                     Frontend panels and database review UI

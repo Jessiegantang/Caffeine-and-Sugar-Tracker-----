@@ -1,4 +1,4 @@
-import { elements } from '../state.js';
+﻿import { elements } from '../state.js';
 import {
   addKnowledgeEvidenceApi,
   analyzeKnowledgeImageApi,
@@ -174,48 +174,28 @@ function handleAddDrinkToDatabase() {
   const caffeine = parseInt(document.getElementById('new-drink-caffeine').value, 10);
   const baseSugar = parseFloat(document.getElementById('new-drink-sugar').value);
   const defaultVolume = parseInt(document.getElementById('new-drink-volume').value, 10);
-  const abv = parseFloat(document.getElementById('new-drink-abv').value) || 0;
-  
-  // Input validation
+
   const errors = [];
-  
-  if (!name || name.length < 2) {
-    errors.push('饮品名称至少需要2个字符');
-  }
-  
-  if (isNaN(caffeine) || caffeine < 0 || caffeine > 500) {
-    errors.push('咖啡因含量必须是0-500之间的数值');
-  }
-  
-  if (isNaN(baseSugar) || baseSugar < 0 || baseSugar > 100) {
-    errors.push('糖分含量必须是0-100之间的数值');
-  }
-  
-  if (isNaN(defaultVolume) || defaultVolume < 10 || defaultVolume > 2000) {
-    errors.push('容量必须是10-2000ml之间的数值');
-  }
-  
-  if (abv < 0 || abv > 95) {
-    errors.push('酒精度必须是0-95之间的数值');
-  }
-  
+  if (!name || name.length < 2) errors.push('饮品名称至少需要2个字符');
+  if (isNaN(caffeine) || caffeine < 0 || caffeine > 500) errors.push('咖啡因含量必须是0-500之间的数值');
+  if (isNaN(baseSugar) || baseSugar < 0 || baseSugar > 100) errors.push('糖分含量必须是0-100之间的数值');
+  if (isNaN(defaultVolume) || defaultVolume < 10 || defaultVolume > 2000) errors.push('容量必须是10-2000ml之间的数值');
+
   if (errors.length > 0) {
     alert('输入验证失败：\n' + errors.join('\n'));
     return;
   }
-  
-  addDrink(type, { brand, name, caffeine, baseSugar, defaultVolume, abv });
-  
+
+  addDrink(type, { brand, name, caffeine, baseSugar, defaultVolume });
+
   elements.addDrinkForm.reset();
   document.getElementById('new-drink-caffeine').value = 100;
   document.getElementById('new-drink-sugar').value = 10;
   document.getElementById('new-drink-volume').value = 500;
-  document.getElementById('new-drink-abv').value = 0;
-  
+
   renderDatabasePanel();
   if (_onDatabaseChanged) _onDatabaseChanged();
 }
-
 function openEditModal(drinkId) {
   const drink = getDrinkById(drinkId);
   if (!drink) return;
@@ -226,7 +206,6 @@ function openEditModal(drinkId) {
   document.getElementById('edit-drink-caffeine').value = drink.caffeine || 0;
   document.getElementById('edit-drink-sugar').value = drink.baseSugar || 0;
   document.getElementById('edit-drink-volume').value = drink.defaultVolume || 500;
-  document.getElementById('edit-drink-abv').value = drink.abv || 0;
   
   elements.editDrinkModal.style.display = 'flex';
 }
@@ -243,43 +222,24 @@ function handleUpdateDrink() {
   const caffeine = parseInt(document.getElementById('edit-drink-caffeine').value, 10);
   const baseSugar = parseFloat(document.getElementById('edit-drink-sugar').value);
   const defaultVolume = parseInt(document.getElementById('edit-drink-volume').value, 10);
-  const abv = parseFloat(document.getElementById('edit-drink-abv').value) || 0;
-  
-  // Input validation
+
   const errors = [];
-  
-  if (!name || name.length < 2) {
-    errors.push('饮品名称至少需要2个字符');
-  }
-  
-  if (isNaN(caffeine) || caffeine < 0 || caffeine > 500) {
-    errors.push('咖啡因含量必须是0-500之间的数值');
-  }
-  
-  if (isNaN(baseSugar) || baseSugar < 0 || baseSugar > 100) {
-    errors.push('糖分含量必须是0-100之间的数值');
-  }
-  
-  if (isNaN(defaultVolume) || defaultVolume < 10 || defaultVolume > 2000) {
-    errors.push('容量必须是10-2000ml之间的数值');
-  }
-  
-  if (abv < 0 || abv > 95) {
-    errors.push('酒精度必须是0-95之间的数值');
-  }
-  
+  if (!name || name.length < 2) errors.push('饮品名称至少需要2个字符');
+  if (isNaN(caffeine) || caffeine < 0 || caffeine > 500) errors.push('咖啡因含量必须是0-500之间的数值');
+  if (isNaN(baseSugar) || baseSugar < 0 || baseSugar > 100) errors.push('糖分含量必须是0-100之间的数值');
+  if (isNaN(defaultVolume) || defaultVolume < 10 || defaultVolume > 2000) errors.push('容量必须是10-2000ml之间的数值');
+
   if (errors.length > 0) {
     alert('输入验证失败：\n' + errors.join('\n'));
     return;
   }
-  
-  updateDrink(drinkId, { brand, name, caffeine, baseSugar, defaultVolume, abv });
-  
+
+  updateDrink(drinkId, { brand, name, caffeine, baseSugar, defaultVolume });
+
   closeEditModal();
   renderDatabasePanel();
   if (_onDatabaseChanged) _onDatabaseChanged();
 }
-
 function handleDeleteDrink() {
   const drinkId = document.getElementById('edit-drink-id').value;
   
@@ -329,7 +289,7 @@ function parseAndImportCSV(content) {
     return { success: false, error: 'CSV 文件内容为空或只有表头' };
   }
 
-  const validTypes = ['coffee', 'teacoffee', 'tea', 'milktea', 'fruittea', 'soda', 'alcohol'];
+  const validTypes = ['coffee', 'teacoffee', 'tea', 'milktea', 'fruittea', 'soda'];
   let successCount = 0;
   let errorMessages = [];
 
@@ -343,7 +303,7 @@ function parseAndImportCSV(content) {
       continue;
     }
 
-    const [type, brand, name, caffeineStr, sugarStr, volumeStr, abvStr] = parts;
+    const [type, brand, name, caffeineStr, sugarStr, volumeStr] = parts;
 
     if (!validTypes.includes(type)) {
       errorMessages.push(`第 ${i + 1} 行：无效类型 "${type}"`);
@@ -374,15 +334,13 @@ function parseAndImportCSV(content) {
       continue;
     }
 
-    const abv = abvStr ? parseFloat(abvStr) : 0;
 
     addDrink(type, {
       brand: brand || '',
       name: name.trim(),
       caffeine,
       baseSugar: sugar,
-      defaultVolume: volume,
-      abv: isNaN(abv) ? 0 : abv
+      defaultVolume: volume
     });
 
     successCount++;
@@ -624,7 +582,6 @@ async function handleStageImageItems() {
       volume: parseOptionalNumber(row.querySelector('.image-item-volume')?.value),
       caffeine: parseOptionalNumber(row.querySelector('.image-item-caffeine')?.value),
       sugar: parseOptionalNumber(row.querySelector('.image-item-sugar')?.value),
-      abv: original.abv ?? null,
       volume_note: original.volume_note || null,
       raw_evidence: original.raw_evidence || name,
       confidence: original.confidence || 0.65
@@ -799,11 +756,9 @@ function formatNutritionValue(value, unit) {
 function formatNutritionScope(extracted = {}) {
   const hasCaffeine = extracted.caffeine !== null && extracted.caffeine !== undefined;
   const hasSugar = extracted.sugar !== null && extracted.sugar !== undefined;
-  const hasAbv = extracted.abv !== null && extracted.abv !== undefined;
-  if (hasCaffeine && !hasSugar && !hasAbv) return '仅咖啡因';
-  if (hasSugar && !hasCaffeine && !hasAbv) return '仅糖分';
+  if (hasCaffeine && !hasSugar) return '仅咖啡因';
+  if (hasSugar && !hasCaffeine) return '仅糖分';
   if (hasCaffeine && hasSugar) return '咖啡因+糖分';
-  if (hasAbv && !hasCaffeine && !hasSugar) return '仅酒精';
   return '部分数据';
 }
 
