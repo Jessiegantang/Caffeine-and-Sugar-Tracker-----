@@ -1393,8 +1393,6 @@ function renderExplainability(log) {
   const retrievalScore = log.retrieval_score !== undefined && log.retrieval_score !== null
     ? Number(log.retrieval_score).toFixed(3)
     : null;
-  const traceEvents = normalizeAgentTraceEvents(log.explainability?.graph_trace || []);
-
   return `
     <div class="log-explainability">
       <div class="explain-header">
@@ -1413,50 +1411,6 @@ function renderExplainability(log) {
           ${renderReasoningItems(log.reasoning)}
         </ul>
       ` : ''}
-      ${traceEvents.length ? renderLogAgentTrace(traceEvents) : ''}
-    </div>
-  `;
-}
-
-function renderLogAgentTrace(events) {
-  return `
-    <details class="log-agent-trace">
-      <summary class="log-agent-trace-title">
-        <span>流程级 Agent Trace</span>
-        <strong>${events.length} 步</strong>
-      </summary>
-      <ol class="log-agent-trace-list">
-        ${events.map((event, index) => `
-          <li class="log-agent-trace-step tone-${escapeAttr(event.status)}">
-            <span class="log-agent-trace-index">${index + 1}</span>
-            <div class="log-agent-trace-content">
-              <div class="log-agent-trace-head">
-                <strong>${escapeHtml(event.label)}</strong>
-                <span>${escapeHtml(event.phase)} · ${escapeHtml(event.agent)} · ${escapeHtml(formatTraceStatus(event.status))}${event.confidence !== null && event.confidence !== undefined ? ` · ${formatConfidence(event.confidence)}` : ''}</span>
-              </div>
-              ${event.summary ? `<p>${escapeHtml(event.summary)}</p>` : ''}
-              ${event.decision ? `<div class="log-agent-trace-decision">${escapeHtml(event.decision)}</div>` : ''}
-              <div class="log-agent-trace-meta">
-                ${renderLogTraceMeta('输入', event.input)}
-                ${renderLogTraceMeta('输出', event.output)}
-              </div>
-            </div>
-          </li>
-        `).join('')}
-      </ol>
-    </details>
-  `;
-}
-
-function renderLogTraceMeta(title, data) {
-  if (!data || Object.keys(data).length === 0) return '';
-  const items = Object.entries(data)
-    .slice(0, 4)
-    .map(([key, value]) => `${formatTraceKey(key)}: ${formatTraceValue(value)}`);
-  return `
-    <div class="log-agent-trace-meta-block">
-      <span>${escapeHtml(title)}</span>
-      <small>${escapeHtml(items.join('；'))}</small>
     </div>
   `;
 }
