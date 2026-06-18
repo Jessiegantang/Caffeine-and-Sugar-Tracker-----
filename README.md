@@ -1,162 +1,49 @@
-﻿# DrinkMind
+# DrinkMind 饮品摄入陪伴助手
 
-DrinkMind is a composition-aware nutrition estimation agent for caffeine and
-sugar tracking. It combines natural-language drink parsing, a unified nutrition
-pipeline, trusted knowledge lookup, deterministic Composition Estimation, saved
-explainability, and a human feedback review loop.
+DrinkMind 是一个面向咖啡、奶茶、果茶等饮品记录场景的 Agentic Workflow 项目。它支持用户用自然语言记录饮品，并结合 SQL 知识库、Chroma/RAG 检索、成分规则估算、风险判断、可解释性 trace 和人工反馈审核流程，估算饮品的咖啡因与糖分摄入。
 
-## Key Features
+项目重点不是做一个简单聊天机器人，而是把 LLM、检索、规则和人工审核放进一个可控、可追踪、可回归测试的后端工作流里。
 
-- Natural-language drink parsing for common drink logging messages.
-- LangGraph StateGraph nutrition workflow used by manual logging and
-  agent-assisted logging.
-- SQL and RAG knowledge priority for reviewed product nutrition data.
-- Composition Estimation fallback for drinks without a trusted exact match,
-  backed by ingredient-level range rules.
-- Backward-compatible best estimates in `caffeine` and `sugarContent`, with
-  optional `caffeine_range`, `sugar_range`, component-level ranges, and
-  `uncertainty_drivers` when composition estimation is used.
-- Explainability persistence and replay through `composition_json` and
-  `explainability_json` on `DrinkLog`. The product UI defaults to a friendly
-  Estimate Result view, while LangGraph traces, retrieval score, raw reasoning,
-  components, and verification details remain folded under technical details.
-- Human Feedback Loop for correcting one estimate through a simplified form and
-  optionally submitting it as reviewable evidence.
-- Knowledge Acquisition review flow from `ProductCandidate` and
-  `NutritionEvidence` into `DrinkKnowledge`.
-- Composition eval report and PowerShell quality gate for regression checks.
+## 核心能力
 
-## How To Run
+- 自然语言饮品解析：从用户输入中解析品牌、品名、容量、甜度、饮品类型等字段。
+- LangGraph 工作流编排：将饮品解析、字段追问、知识检索、营养估算、风险判断和结果解释拆成可追踪节点。
+- 混合营养估算策略：优先使用已审核 SQL 知识库；其次使用 Chroma/RAG 相似检索；缺少可信匹配时降级到成分规则估算。
+- Composition Estimation：根据咖啡基底、茶基底、奶基底、果汁基底、糖浆等组件估算咖啡因和糖分。
+- 可解释性输出：保存 graph trace、估算方法、命中知识 ID、检索分数、成分拆解、假设条件和 warning。
+- Human-in-the-loop 反馈闭环：支持用户纠正估算结果，将反馈转成 evidence，经审核后写入正式知识库。
+- 离线评估：提供 composition eval 和 agent effect eval，用于检查估算结果、工具路径、风险判断、追问逻辑和离线稳定性。
 
-Install frontend dependencies:
+## 技术栈
 
-```bash
-npm install
+- 后端：Python、FastAPI、SQLAlchemy、Alembic、SQLite
+- Agent / AI 应用：LangGraph、LangChain、OpenAI-compatible API
+- 检索与知识库：Chroma、SQL 知识库、RAG 相似检索
+- 前端：Vite、JavaScript、HTML、CSS
+- 测试与评估：unittest、离线 eval、PowerShell quality gate
+
+## 系统流程
+
+```mermaid
+flowchart LR
+  A["用户自然语言输入"] --> B["Intake Parser"]
+  B --> C["LangGraph Orchestrator"]
+  C --> D{"是否缺少关键字段"}
+  D -->|是| E["追问容量/甜度等信息"]
+  D -->|否| F["Nutrition Pipeline"]
+  F --> G["SQL 知识库精确匹配"]
+  F --> H["Chroma / RAG 相似检索"]
+  F --> I["Composition Estimation 降级估算"]
+  G --> J["结果校验与可解释性输出"]
+  H --> J
+  I --> J
+  J --> K["饮品日志与风险判断"]
+  K --> L["用户反馈纠正"]
+  L --> M["Evidence 审核"]
+  M --> N["写入正式知识库"]
 ```
 
-Install backend dependencies:
-
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-Configure environment variables:
-
-```bash
-copy backend\.env.example backend\.env
-```
-
-Then edit `backend\.env` and set any API keys you want to use. Do not commit
-`.env`.
-
-For browser API access, set `CORS_ALLOW_ORIGINS` to the comma-separated frontend
-origins that should be allowed. Local development defaults to
-`http://localhost:5173,http://127.0.0.1:5173`; production should use the real
-frontend domain and should not use `*`.
-
-Apply database migrations:
-
-```bash
-cd backend
-venv\Scripts\python.exe -m alembic upgrade head
-```
-
-Initialize the local knowledge base:
-
-```bash
-cd backend
-python -m scripts.init_rag
-```
-
-Start the backend:
-
-```bash
-cd backend
-uvicorn main:app --reload
-```
-
-The API runs at `http://127.0.0.1:8000`.
-
-Start the frontend in another terminal:
-
-```bash
-npm run dev
-```
-
-The Vite app prints the local URL, usually `http://localhost:5173`.
-
-On Windows PowerShell, the demo helper can start both services:
-
-```powershell
-.\scripts\start_demo.ps1
-```
-
-## Quality Gate
-
-Run the full local quality gate from the project root:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\quality_gate.ps1
-```
-
-The gate runs:
-
-- Backend unittest discovery.
-- Composition eval report.
-- Agent effect eval report.
-- Frontend build.
-
-## Testing And Eval
-
-Run all backend tests:
-
-```powershell
-cd backend
-venv\Scripts\python.exe -m unittest discover -s tests
-```
-
-Run only the nutrition estimation service tests:
-
-```powershell
-cd backend
-venv\Scripts\python.exe -m unittest tests.test_nutrition_estimation_service
-```
-
-Run the Composition Estimation eval:
-
-```powershell
-cd backend
-venv\Scripts\python.exe tests\run_composition_eval_report.py
-```
-
-The eval suite checks deterministic composition behavior, SQL knowledge
-priority, result shape, confidence ranges, component-level range fields, and
-explainability payloads.
-
-Run the Agent Effect eval:
-
-```powershell
-cd backend
-venv\Scripts\python.exe tests\run_agent_effect_eval_report.py
-```
-
-The Agent Effect eval runs fixed user messages through the orchestrator in
-offline mode. It checks intent/action selection, risk judgment, required and
-forbidden tools, evidence references, structured nutrition trace shape, memory
-updates, response snippets, and deterministic offline stability. Use
-`--write-doc` to write `docs/agent_effect_eval_report.md`.
-
-## Nutrition Workflow
-
-Nutrition estimation is now an explicit LangGraph `StateGraph` inside
-`backend/workflows/nutrition_pipeline.py`. The public contract remains
-`estimate_drink_nutrition(drink, db)`, and both `/api/log_drink` and
-`/api/agent/act` enter the same workflow through that function.
-
-Graph nodes:
+营养估算工作流位于 `backend/workflows/nutrition_pipeline.py`，主要节点包括：
 
 - `normalize_input`
 - `lookup_knowledge`
@@ -167,78 +54,176 @@ Graph nodes:
 - `verify_result`
 - `build_explainability`
 
-Knowledge path:
+## 快速开始
 
-```text
-normalize_input -> lookup_knowledge -> route_estimation ->
-use_knowledge_result -> verify_result -> build_explainability
+### 1. 安装前端依赖
+
+```bash
+npm install
 ```
 
-Composition path:
+### 2. 安装后端依赖
 
-```text
-normalize_input -> lookup_knowledge -> route_estimation ->
-composition_decompose -> composition_estimate -> verify_result ->
-build_explainability
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-`lookup_knowledge` uses `knowledge.knowledge_lookup.enrich_drink_data`; SQL/RAG
-internals now live under `backend/knowledge`. For demos and debugging, the
-result explainability includes `explainability.graph_trace` and
-`explainability.verification`.
+### 3. 配置环境变量
 
-Composition Estimation now uses ingredient-level range rules. The top-level
-`caffeine` and `sugarContent` fields remain best estimates for existing callers.
-Composition results can also include `caffeine_range`, `sugar_range`,
-`components[].caffeine_range_mg`, `components[].sugar_range_g`, and
-`composition.uncertainty_drivers`. Explainability should be read as a best
-estimate plus a likely range and the main sources of uncertainty, not as a
-lab-precise nutrition label.
+```powershell
+copy backend\.env.example backend\.env
+```
 
-The frontend keeps this product-facing: users see an Estimate Result first.
-Technical details such as LangGraph workflow, retrieval score, raw reasoning,
-component lists, and verification remain available but folded by default.
+默认情况下，项目可以在离线模式下运行测试和核心规则流程。需要调用真实 LLM 时，再编辑 `backend/.env`：
 
-## Suggested Demo Flow
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+BASE_URL=https://api.openai.com/v1
+MODEL_NAME=gpt-4o-mini
+VISION_MODEL_NAME=gpt-4o-mini
+ENABLE_LLM=false
+DRINKMIND_OFFLINE=false
+CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
 
-1. Start backend and frontend.
-2. Log a drink without an exact reviewed knowledge match and show Composition Estimation.
-3. Open the Estimate Result panel and expand technical details if needed.
-4. Replay saved explainability from a historical log.
-5. Submit nutrition feedback.
-6. Review the generated feedback evidence.
-7. Approve evidence into the knowledge base.
-8. Log the same drink again and show reviewed knowledge priority.
-9. Run the quality gate.
+注意：不要提交 `.env`。仓库只保留 `.env.example`。
 
-## Project Structure
+### 4. 初始化数据库
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m alembic upgrade head
+```
+
+### 5. 初始化本地 RAG 知识库
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m scripts.init_rag
+```
+
+### 6. 启动后端
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m uvicorn main:app --reload
+```
+
+后端默认运行在：
+
+```text
+http://127.0.0.1:8000
+```
+
+### 7. 启动前端
+
+```bash
+npm run dev
+```
+
+Vite 会输出本地访问地址，通常是：
+
+```text
+http://localhost:5173
+```
+
+也可以在 Windows PowerShell 中使用演示启动脚本：
+
+```powershell
+.\scripts\start_demo.ps1
+```
+
+## 测试与评估
+
+运行后端单元测试：
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m unittest discover -s tests
+```
+
+运行 Composition Estimation 评估：
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe tests\run_composition_eval_report.py
+```
+
+运行 Agent Effect 评估：
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe tests\run_agent_effect_eval_report.py
+```
+
+运行完整本地质量检查：
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\quality_gate.ps1
+```
+
+质量检查包括：
+
+- 后端 unittest
+- Composition eval
+- Agent effect eval
+- 前端构建
+
+## 推荐演示路径
+
+1. 启动后端和前端。
+2. 输入一条自然语言饮品记录，例如“记录一杯库迪超燃生椰美式 650ml 无糖”。
+3. 展示 Agent 解析出的品牌、品名、容量和甜度。
+4. 展示没有可信知识命中时进入 Composition Estimation。
+5. 展开估算结果的技术细节，查看 graph trace、成分拆解、confidence 和 warnings。
+6. 提交一次营养纠正反馈。
+7. 在 evidence 审核面板中查看并审核反馈证据。
+8. 审核通过后再次记录同款饮品，展示已审核知识库优先命中。
+9. 运行 eval，展示 agent 行为和估算流程可回归测试。
+
+## 项目结构
 
 ```text
 backend/
-  main.py                         FastAPI app bootstrap and router registration
-  api/                            API schemas and routers
-  services/                       Business services called by routers
-    nutrition_estimation_service.py Parsed drink to nutrition pipeline adapter
-    memory_service.py              User preference memory
+  main.py                         FastAPI 应用入口与路由注册
+  api/                            API schema 与 routers
+  services/                       业务服务层
   db/
-    database.py                   SQLAlchemy models, session, and lightweight migrations
+    database.py                   SQLAlchemy models、session 与数据库连接
   agents/
-    orchestrator.py               LangGraph agent routing
-    health_plan_agent.py          7-day plan generation and progress
-  rules/                          Deterministic nutrition and risk rules
-  knowledge/                      Knowledge lookup, Chroma/RAG, and acquisition
-  workflows/                      LangGraph workflows
-  scripts/                        Backend maintenance scripts
-  tests/                          Unit tests and composition eval fixtures
-
-docs/
-  项目七层架构.md                 Current implementation architecture
+    orchestrator.py               LangGraph agent 路由与主流程
+    intake_parser.py              自然语言饮品解析
+    companion_agent.py            陪伴式建议回复
+    memory_extractor_agent.py     用户偏好提取
+    report_agent.py               报告生成
+  rules/                          确定性规则、成分估算、风险判断
+  knowledge/                      知识检索、Chroma/RAG、证据采集与审核
+  workflows/
+    nutrition_pipeline.py         LangGraph 营养估算 workflow
+  migrations/                     Alembic 数据库迁移
+  scripts/                        后端维护脚本
+  tests/                          单元测试与离线 eval
 
 src/
-  components/                     Frontend panels and database review UI
-  api.js                          Frontend API client
+  api.js                          前端 API client
+  components/                     聊天框、数据库面板、审核 UI
+  state.js                        前端状态与 DOM 引用
+  storage.js                      本地存储
 
 scripts/
-  quality_gate.ps1                Backend tests, eval report, frontend build
-  start_demo.ps1                  Local demo startup helper
+  quality_gate.ps1                本地质量检查脚本
+  start_demo.ps1                  本地演示启动脚本
+
+docs/
+  项目七层架构.md                 架构说明文档
 ```
+
+## 安全与仓库说明
+
+- `.env`、数据库文件、Chroma 持久化目录、虚拟环境、构建产物和缓存文件不应提交。
+- 真实 API Key 只放在本地 `backend/.env` 中。
+- 如果误提交过数据库、密钥或构建产物，公开仓库前应清理 Git 历史或重新创建干净仓库。
+- 当前项目面向学习和演示，不提供医学建议；咖啡因与糖分结果是估算值，不应作为专业营养或医疗结论。

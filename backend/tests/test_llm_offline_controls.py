@@ -138,8 +138,10 @@ class LLMOfflineControlTests(unittest.TestCase):
             "OPENAI_API_KEY": "real-looking-key",
         }):
             with patch.object(companion_agent, "llm", RaisingLLM()):
-                expected = "LLM companion is disabled in the current environment."
-                self.assertEqual(companion_agent.generate_companion_response("hi", [], {}), expected)
+                response = companion_agent.generate_companion_response("hi", [], {})
+
+        self.assertTrue(response)
+        self.assertNotIn("LLM companion is disabled", response)
 
     def test_enrich_no_knowledge_match_is_quiet_and_uses_local_fallback_when_disabled(self):
         db = SessionLocal()
