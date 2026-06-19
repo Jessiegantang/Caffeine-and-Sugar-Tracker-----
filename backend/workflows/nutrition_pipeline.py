@@ -13,6 +13,10 @@ from langgraph.graph import END, START, StateGraph
 
 from knowledge.knowledge_lookup import enrich_drink_data
 from rules.composition_agent import decompose_drink, estimate_from_composition
+from rules.llm_composition_decomposer import (
+    decompose_with_optional_llm,
+    should_try_llm_decomposition,
+)
 
 
 KNOWLEDGE_METHODS_TO_KEEP = {"SQL_EXACT_MATCH", "RAG_MATCH"}
@@ -122,6 +126,44 @@ def _composition_decompose_node(state: NutritionEstimationState) -> NutritionEst
         )
     except Exception as e:
         _handle_composition_error(state, e)
+    return state
+
+
+def _llm_composition_decompose_node(state: NutritionEstimationState) -> NutritionEstimationState:
+    if state.get("route") != "composition":
+        return state
+
+    try:
+        before = state.get("composition") or {}
+        state["composition"] = decompose_with_optional_llm(state["normalized_drink"], before)
+        used_llm = bool(state["composition"].get("llm_decomposition_used"))
+        _trace(
+            state,
+            "llm_composition_decompose",
+            phase="拆解",
+            agent="LLM Composition Decomposer",
+            summary=(
+                "在规则拆解不确定或饮品较复杂时，让 LLM 只补充成分结构；"
+                "最终营养数值仍由规则计算。"
+            ),
+            input=_composition_summary(before),
+            output=_composition_summary(state["composition"]),
+            decision="使用 LLM 辅助拆解" if used_llm else "跳过 LLM，保留规则拆解",
+            confidence=state["composition"].get("confidence"),
+        )
+    except Exception as e:
+        state["composition"].setdefault("warnings", []).append(
+            "LLM composition decomposition did not finish; using rule-based decomposition."
+        )
+        _trace(
+            state,
+            "llm_composition_decompose",
+            phase="拆解",
+            agent="LLM Composition Decomposer",
+            summary="LLM 是可选成分拆解增强；本次未完成，已保留规则拆解结果继续估算。",
+            output={"error": str(e)},
+            status="warning",
+        )
     return state
 
 
@@ -244,7 +286,11 @@ def _route_after_decision(state: NutritionEstimationState) -> str:
 
 
 def _route_after_decompose(state: NutritionEstimationState) -> str:
-    return "fallback_knowledge" if state.get("route") != "composition" else "composition_estimate"
+    if state.get("route") != "composition":
+        return "fallback_knowledge"
+    if should_try_llm_decomposition(state.get("normalized_drink") or {}, state.get("composition") or {}):
+        return "llm_composition_decompose"
+    return "composition_estimate"
 
 
 def _handle_composition_error(state: NutritionEstimationState, error: Exception) -> None:
@@ -302,6 +348,7 @@ TRACE_LABELS = {
     "route_estimation": "路由决策",
     "use_knowledge_result": "采用知识结果",
     "composition_decompose": "成分拆解",
+    "llm_composition_decompose": "LLM 成分拆解",
     "composition_estimate": "成分估算",
     "composition_error": "成分估算异常",
     "verify_result": "结果校验",
@@ -341,6 +388,8 @@ def _composition_summary(composition: dict) -> dict:
         "fruit_base_volume_ml": composition.get("fruit_base_volume_ml"),
         "syrup_pumps": composition.get("syrup_pumps"),
         "sweetness_level": composition.get("sweetness_level"),
+        "decomposition_source": composition.get("decomposition_source"),
+        "llm_decomposition_used": composition.get("llm_decomposition_used"),
         "confidence": composition.get("confidence"),
         "assumptions": composition.get("assumptions"),
         "warnings": composition.get("warnings"),
@@ -362,6 +411,7 @@ def _build_graph():
     graph.add_node("route_estimation", _route_estimation_node)
     graph.add_node("use_knowledge_result", _use_knowledge_result_node)
     graph.add_node("composition_decompose", _composition_decompose_node)
+    graph.add_node("llm_composition_decompose", _llm_composition_decompose_node)
     graph.add_node("composition_estimate", _composition_estimate_node)
     graph.add_node("verify_result", _verify_result_node)
     graph.add_node("build_explainability", _build_explainability_node)
@@ -381,10 +431,12 @@ def _build_graph():
         "composition_decompose",
         _route_after_decompose,
         {
+            "llm_composition_decompose": "llm_composition_decompose",
             "composition_estimate": "composition_estimate",
             "fallback_knowledge": "verify_result",
         },
     )
+    graph.add_edge("llm_composition_decompose", "composition_estimate")
     graph.add_edge("composition_estimate", "verify_result")
     graph.add_edge("use_knowledge_result", "verify_result")
     graph.add_edge("verify_result", "build_explainability")

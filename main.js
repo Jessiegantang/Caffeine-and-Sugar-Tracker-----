@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // Caffeine and Sugar Tracker - Main Coordinator
 // ==========================================
 
@@ -742,7 +742,14 @@ function renderFeedbackMetadata(feedback, notice = '') {
 
 function renderNutritionFeedbackForm(result) {
   const logId = result?.log_id;
-  if (!logId) return '';
+  if (!logId) {
+    return `
+      <div class="nutrition-feedback-form nutrition-feedback-disabled">
+        <div class="nutrition-explain-title">人工修正估算</div>
+        <div class="nutrition-empty-note">保存为饮品记录后，可以在这里修正咖啡因和糖分。</div>
+      </div>
+    `;
+  }
   const corrected = result.explainability?.feedback?.corrected || result.feedback?.corrected || {};
   const brand = corrected.brand ?? result.brand ?? '';
   const name = corrected.name ?? result.name ?? '';
@@ -753,10 +760,10 @@ function renderNutritionFeedbackForm(result) {
 
   return `
     <form id="nutrition-feedback-form" class="nutrition-feedback-form" data-log-id="${escapeAttr(logId)}">
-      <div class="nutrition-explain-title">修正估算结果</div>
+      <div class="nutrition-explain-title">人工修正估算</div>
       <div class="feedback-form-grid feedback-form-grid-simple">
-        <label>咖啡因<input name="caffeine" type="number" min="0" max="800" step="0.1" value="${escapeAttr(caffeine)}" required></label>
-        <label>糖分<input name="sugarContent" type="number" min="0" max="150" step="0.1" value="${escapeAttr(sugarContent)}" required></label>
+        <label>咖啡因 mg<input name="caffeine" type="number" min="0" max="800" step="0.1" value="${escapeAttr(caffeine)}" required></label>
+        <label>糖分 g<input name="sugarContent" type="number" min="0" max="150" step="0.1" value="${escapeAttr(sugarContent)}" required></label>
       </div>
       <label class="feedback-note-label">数据来源说明<textarea name="source_note" rows="2" placeholder="例如：包装营养表标注咖啡因 120mg，糖 18g"></textarea></label>
       <div class="feedback-options">
@@ -768,20 +775,19 @@ function renderNutritionFeedbackForm(result) {
           <label>品牌<input name="brand" value="${escapeAttr(brand)}"></label>
           <label>名称<input name="name" value="${escapeAttr(name)}" required></label>
           <label>类型<select name="type">${renderFeedbackTypeOptions(type)}</select></label>
-          <label>容量<input name="volume" type="number" min="10" max="2000" value="${escapeAttr(volume)}" required></label>
+          <label>容量 ml<input name="volume" type="number" min="10" max="2000" value="${escapeAttr(volume)}" required></label>
         </div>
         <div class="feedback-options">
           <label><input type="checkbox" name="submit_as_evidence"> 加入审核队列</label>
         </div>
       </details>
       <div class="feedback-actions">
-        <button type="submit" class="btn btn-primary">提交修正</button>
+        <button type="submit" class="btn btn-primary">保存修正</button>
         <span class="feedback-status" id="nutrition-feedback-status"></span>
       </div>
     </form>
   `;
 }
-
 function renderFeedbackTypeOptions(selected) {
   return Object.entries(TYPE_DEFINITIONS).map(([value, def]) => (
     `<option value="${escapeAttr(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(getTypeTextCN(value))}</option>`
@@ -817,7 +823,7 @@ function normalizeTextList(value) {
 
 function formatAmount(amount, unit) {
   const numeric = Number(amount ?? 0);
-  return `${Number.isFinite(numeric) ? numeric.toFixed(numeric % 1 === 0 ? 0 : 1) : amount} ${unit || ''}`.trim();
+  return `${Number.isFinite(numeric) ? numeric.toFixed(numeric % 1 === 0 ? 0 : 1) : amount} ${translateNutritionTerm(unit || '')}`.trim();
 }
 
 function formatNumber(value) {
@@ -1154,12 +1160,12 @@ function renderDailyPanel() {
   const dateLogs = getLogsForDate(state.logs, state.selectedDate);
 
   // Compute Daily Totals
-  const totalCaffeine = dateLogs.reduce((sum, l) => sum + l.caffeine, 0);
-  const totalSugar = dateLogs.reduce((sum, l) => sum + l.sugarContent, 0);
+  const totalCaffeine = dateLogs.reduce((sum, l) => sum + Number(l.caffeine || 0), 0);
+  const totalSugar = dateLogs.reduce((sum, l) => sum + Number(l.sugarContent || 0), 0);
 
   // Render Daily Gauges
-  elements.caffeineTotal.textContent = totalCaffeine;
-  elements.sugarTotal.textContent = totalSugar.toFixed(1);
+  elements.caffeineTotal.textContent = formatNumber(totalCaffeine);
+  elements.sugarTotal.textContent = formatNumber(totalSugar);
 
   // Update SVG rings (circumference = 377)
   const updateRing = (el, val, max) => {
@@ -1213,14 +1219,22 @@ function translateNutritionTerm(value) {
   const terms = {
     espresso: '浓缩咖啡',
     coconut_water_base: '椰子水基底',
+    'coconut water or coconut beverage base': '椰子水或椰子饮品基底',
     coconut_milk: '厚椰乳',
+    'coconut milk': '厚椰乳',
     milk: '牛奶',
     oat_milk: '燕麦奶',
     black_or_oolong_tea: '红茶/乌龙茶底',
+    jasmine_tea: '茉莉花茶底',
+    'tea base': '茶底',
     light_tea: '轻茶底',
     fruit_or_juice_base: '果汁/水果基底',
+    'fruit or juice base': '果汁/水果基底',
+    fruit_juice_and_puree: '果汁/果泥基底',
+    mango_pomelo_puree: '芒果西柚果泥',
     generic_beverage_base: '通用饮品基底',
     added_syrup: '额外糖浆',
+    pump_equivalent: '泵等效',
     coffee_base: '咖啡基底',
     fruit_base: '水果/饮品基底',
     milk_base: '奶基底',
@@ -1267,6 +1281,66 @@ function translateNutritionText(value) {
       '生椰美式按“浓缩咖啡 + 椰子水或椰子饮品基底”建模。',
     'No added syrup sugar because sweetness level is none.':
       '甜度为无糖，因此没有计入额外糖浆糖分。',
+    'Sweetness level is unknown; using half-sugar added sweetener assumption.':
+      '甜度未知，因此按半糖估算额外甜味来源。',
+    'Functional drink naming may imply extra active ingredients, but no verified product evidence was available.':
+      '功能型命名可能暗示额外活性成分，但当前没有可信产品证据。',
+    'Espresso caffeine varies by shot size and extraction.':
+      '浓缩咖啡因会随 shot 大小和萃取方式变化。',
+    'Coconut beverage sugar varies by brand recipe and base volume.':
+      '椰子饮品糖分会随品牌配方和基底用量变化。',
+    'Coconut milk sugar varies by brand recipe and milk volume.':
+      '厚椰乳糖分会随品牌配方和用量变化。',
+    'Oat milk sugar varies by product formula and milk volume.':
+      '燕麦奶糖分会随产品配方和用量变化。',
+    'Milk volume is inferred from cup size, so natural milk sugar is a range.':
+      '奶量是根据杯型推断的，因此天然乳糖用范围表示。',
+    'Tea caffeine and milk ratio vary across milk tea recipes.':
+      '不同奶茶配方中的茶底咖啡因和奶量比例会有差异。',
+    'Sweetness labels map to brand-specific standard syrup amounts.':
+      '甜度标签会对应不同品牌自己的标准糖浆用量。',
+    'Fruit or juice base sugar varies by fruit type, puree concentration, and brand recipe.':
+      '水果或果汁基底糖分会随水果类型、果泥浓度和品牌配方变化。',
+    'Fruit or juice base sugar varies by fruit mix and recipe concentration.':
+      '水果/果汁基底糖分会随水果组合和配方浓度变化。',
+    'Tea caffeine is estimated from a light tea base range.':
+      '茶底咖啡因按轻茶底范围估算。',
+    'Unknown drink style; using conservative generic beverage assumptions.':
+      '饮品类型不明确，因此使用保守的通用饮品假设。',
+    'Drink style is unknown, so both composition and sugar density use broad generic assumptions.':
+      '饮品类型未知，因此组成和糖密度都使用较宽的通用假设。',
+    'Coconut latte is modeled as espresso plus sweetened coconut milk base.':
+      '生椰拿铁按“浓缩咖啡 + 含糖厚椰乳基底”建模。',
+    'Oat latte is modeled as espresso plus oat milk.':
+      '燕麦拿铁按“浓缩咖啡 + 燕麦奶”建模。',
+    'Latte is modeled as espresso plus milk.':
+      '拿铁按“浓缩咖啡 + 牛奶”建模。',
+    'Americano is modeled as espresso diluted with water.':
+      '美式按“浓缩咖啡 + 水”建模。',
+    'Milk tea is modeled as tea base, milk, and adjustable added syrup.':
+      '奶茶按“茶底 + 奶基底 + 可调额外糖浆”建模。',
+    'Fruit tea is modeled as tea plus fruit or juice base.':
+      '水果茶按“茶底 + 水果或果汁基底”建模。',
+    'Fruit americano is modeled as espresso plus a fruit or juice base.':
+      '水果美式按“浓缩咖啡 + 水果或果汁基底”建模。',
+    'Fallback composition uses a small generic sugar-containing base plus optional sweetener.':
+      '兜底组成使用少量通用含糖饮品基底，并按甜度估算可选甜味来源。',
+    'Natural sugars from fresh mango and pomelo heavily influence total sweetness independent of added syrup.':
+      '鲜芒果和西柚带来的天然糖会明显影响总甜度，不完全取决于额外糖浆。',
+    'Coconut milk base concentration and fruit puree ratios are subject to seasonal and regional recipe updates.':
+      '椰乳基底浓度和果泥比例可能会随季节、地区或配方调整而变化。',
+    "Luckin Coffee's Yangzhi Ganlu is formulated as a fruit milk tea combining jasmine tea, coconut milk, and mango-pomelo puree.":
+      '瑞幸杨枝甘露按“茉莉茶底 + 椰乳 + 芒果西柚果泥”的水果奶茶结构理解。',
+    "The 'three' sugar level corresponds to 3 standard syrup pumps.":
+      '三分糖按约 3 泵标准糖浆理解。',
+    'Sago and ice occupy the remaining volume fraction.':
+      '西米和冰块会占据剩余容量比例。',
+    'brand and specific recipe unknown':
+      '品牌和具体配方不明确。',
+    'sugar content not specified':
+      '糖分含量未明确标注。',
+    'compositional ratios are industry estimates':
+      '成分比例属于行业常见估算。',
     'composition route produced no components':
       '成分估算路径没有生成成分明细。',
     'composition route selected a non-composition method':
@@ -1283,6 +1357,10 @@ function translateNutritionText(value) {
     'sugarContent exceeds 100g': '糖分超过 100g。'
   };
   if (direct[text]) return direct[text];
+  if (text.startsWith('Warning: ')) {
+    const translated = translateNutritionText(text.slice(9));
+    return translated === text.slice(9) ? `提醒：${text.slice(9)}` : `提醒：${translated}`;
+  }
 
   let match = text.match(/^([\d.]+)-([\d.]+)mg caffeine per espresso shot, best ([\d.]+)mg$/);
   if (match) {
@@ -1297,6 +1375,11 @@ function translateNutritionText(value) {
   match = text.match(/^([\d.]+)-([\d.]+)g sugar per 100ml (.+), best ([\d.]+)g$/);
   if (match) {
     return `${translateNutritionTerm(match[3])} 按每 100ml ${match[1]}-${match[2]}g 糖估算，取 ${match[4]}g。`;
+  }
+
+  match = text.match(/^([\d.]+)-([\d.]+)mg caffeine per 100ml (.+), best ([\d.]+)mg$/);
+  if (match) {
+    return `${translateNutritionTerm(match[3])} 按每 100ml ${match[1]}-${match[2]}mg 咖啡因估算，取 ${match[4]}mg。`;
   }
 
   match = text.match(/^Estimated espresso caffeine range from ([\d.]+) shot\(s\): ([\d.]+)-([\d.]+)mg, best ([\d.]+)mg\.$/);
@@ -1322,6 +1405,11 @@ function translateNutritionText(value) {
   match = text.match(/^Added sugar range adjusted by sweetness level '([^']+)': ([\d.]+)-([\d.]+)g\.$/);
   if (match) {
     return `按甜度档位“${getSugarTextCN(match[1])}”估算额外加糖范围：${match[2]}-${match[3]}g。`;
+  }
+
+  match = text.match(/^([\d.]+)-([\d.]+)g sugar per syrup pump adjusted by sweetness level ([^,]+), best ([\d.]+)g$/);
+  if (match) {
+    return `每泵糖浆按 ${match[1]}-${match[2]}g 糖估算，并按甜度“${getSugarTextCN(match[3])}”调整，取 ${match[4]}g。`;
   }
 
   const translatedTerm = translateNutritionTerm(text);
@@ -1525,12 +1613,7 @@ async function renderDailyInsights(dateLogs, totalCaffeine, totalSugar) {
     
     elements.insightsList.innerHTML = '';
     if (dailyInsights.length === 0) {
-      dailyInsights.push({
-        level: 'success',
-        title: '今日饮品摄入控制优秀！',
-        message: '您的饮品摄入保持在完美的健康限值内，继续保持良好的状态！',
-        icon: '✅'
-      });
+      dailyInsights = buildDailyFallbackInsights(totalCaffeine, totalSugar);
     }
 
   // Populate UI
@@ -1551,20 +1634,55 @@ async function renderDailyInsights(dateLogs, totalCaffeine, totalSugar) {
   }
 }
 
+function buildDailyFallbackInsights(totalCaffeine, totalSugar) {
+  const insights = [];
+  if (totalSugar > SUGAR_LIMIT) {
+    insights.push({
+      level: 'warning',
+      title: '今日糖分已经超出预算',
+      message: `今天糖分约 ${totalSugar.toFixed(1)}g，已经超过 ${SUGAR_LIMIT}g 的日建议限量。后续饮品建议优先选择无糖茶、无糖美式或白水。`,
+      icon: '⚠️'
+    });
+  }
+  if (totalCaffeine > CAFFEINE_LIMIT) {
+    insights.push({
+      level: 'warning',
+      title: '今日咖啡因已经超出预算',
+      message: `今天咖啡因约 ${totalCaffeine.toFixed(1)}mg，已经超过 ${CAFFEINE_LIMIT}mg 的日建议限量。后续建议避免继续摄入含咖啡因饮品。`,
+      icon: '⚠️'
+    });
+  }
+  if (insights.length > 0) return insights;
+  if (totalSugar > SUGAR_LIMIT * 0.8 || totalCaffeine > CAFFEINE_LIMIT * 0.8) {
+    return [{
+      level: 'info',
+      title: '今日摄入接近预算上限',
+      message: `目前咖啡因约 ${totalCaffeine.toFixed(1)}mg，糖分约 ${totalSugar.toFixed(1)}g。接下来可以选择低糖或无咖啡因饮品，把余量留给晚些时候。`,
+      icon: 'ℹ️'
+    }];
+  }
+  return [{
+    level: 'success',
+    title: '今日饮品摄入控制良好',
+    message: `目前咖啡因约 ${totalCaffeine.toFixed(1)}mg，糖分约 ${totalSugar.toFixed(1)}g，仍在日建议范围内。`,
+    icon: '✅'
+  }];
+}
+
 // Render WEEKLY trend tab
 function renderWeeklyPanel() {
   const todayStr = getLocalDateString();
   const { weeklyLogs, weekDates } = getWeeklyLogs(state.logs, todayStr);
 
   // 1. Render Aggregates
-  const totalCaffeine = weeklyLogs.reduce((sum, l) => sum + l.caffeine, 0);
-  const totalSugar = weeklyLogs.reduce((sum, l) => sum + l.sugarContent, 0);
+  const totalCaffeine = weeklyLogs.reduce((sum, l) => sum + Number(l.caffeine || 0), 0);
+  const totalSugar = weeklyLogs.reduce((sum, l) => sum + Number(l.sugarContent || 0), 0);
 
   // Calculate active tracking days
   const activeDays = new Set(weeklyLogs.map(l => l.date)).size;
 
-  elements.weeklyCaffeineTotal.textContent = totalCaffeine;
-  elements.weeklySugarTotal.textContent = totalSugar.toFixed(1);
+  elements.weeklyCaffeineTotal.textContent = formatNumber(totalCaffeine);
+  elements.weeklySugarTotal.textContent = formatNumber(totalSugar);
   elements.weeklyActiveDays.textContent = activeDays;
 
   // 2. Render SVG Weekly Bar Chart
@@ -1847,13 +1965,13 @@ async function triggerAgentAnalysis(logData) {
           
           // 局部刷新面板数值，避免循环调用 agent
           const dateLogs = state.logs.filter(l => l.date === state.selectedDate);
-          const tc = dateLogs.reduce((s, l) => s + l.caffeine, 0);
-          const ts = dateLogs.reduce((s, l) => s + l.sugarContent, 0);
+          const tc = dateLogs.reduce((s, l) => s + Number(l.caffeine || 0), 0);
+          const ts = dateLogs.reduce((s, l) => s + Number(l.sugarContent || 0), 0);
           
           const elCaf = document.getElementById('caffeine-total');
           const elSug = document.getElementById('sugar-total');
-          if(elCaf) elCaf.textContent = tc;
-          if(elSug) elSug.textContent = ts.toFixed(1);
+          if(elCaf) elCaf.textContent = formatNumber(tc);
+          if(elSug) elSug.textContent = formatNumber(ts);
           
           const ur = (el, val, max) => {
             if(!el) return;
@@ -1901,12 +2019,12 @@ async function fetchDailyAgentInsights(date) {
           state.logs = dbLogs;
           saveLogs(state.logs);
           const dateLogs = state.logs.filter(l => l.date === state.selectedDate);
-          const tc = dateLogs.reduce((s, l) => s + l.caffeine, 0);
-          const ts = dateLogs.reduce((s, l) => s + l.sugarContent, 0);
+          const tc = dateLogs.reduce((s, l) => s + Number(l.caffeine || 0), 0);
+          const ts = dateLogs.reduce((s, l) => s + Number(l.sugarContent || 0), 0);
           const elCaf = document.getElementById('caffeine-total');
           const elSug = document.getElementById('sugar-total');
-          if(elCaf) elCaf.textContent = tc;
-          if(elSug) elSug.textContent = ts.toFixed(1);
+          if(elCaf) elCaf.textContent = formatNumber(tc);
+          if(elSug) elSug.textContent = formatNumber(ts);
           const ur = (el, val, max) => {
             if(!el) return;
             const p = Math.min(val / max, 1);
@@ -1978,4 +2096,5 @@ async function saveSleepData(date, hours) {
     alert('保存睡眠数据失败，请检查后端是否开启。');
   }
 }
+
 

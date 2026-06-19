@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -9,6 +10,7 @@ from rules.composition_agent import (
     estimate_composition_nutrition,
     estimate_from_composition,
 )
+from rules.llm_composition_decomposer import should_try_llm_decomposition
 
 
 class CompositionAgentTests(unittest.TestCase):
@@ -216,6 +218,22 @@ class CompositionAgentTests(unittest.TestCase):
         self.assertTrue(result["composition"]["warnings"])
         self.assertGreaterEqual(result["sugar_range"]["max"] - result["sugar_range"]["min"], 10.0)
         self.assertLess(result["confidence"], 0.5)
+
+    def test_llm_composition_decomposer_is_disabled_by_default(self):
+        composition = decompose_drink({
+            "name": "杨枝甘露",
+            "type": "fruittea",
+            "volume": 500,
+            "sugar": "half",
+        })
+
+        with patch.dict(os.environ, {"ENABLE_LLM_COMPOSITION": "false"}):
+            self.assertFalse(should_try_llm_decomposition({
+                "name": "杨枝甘露",
+                "type": "fruittea",
+                "volume": 500,
+                "sugar": "half",
+            }, composition))
 
 
 if __name__ == "__main__":

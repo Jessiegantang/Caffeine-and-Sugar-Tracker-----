@@ -1982,10 +1982,16 @@ header {
 }
 
 .acquisition-lists {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  display: block;
   margin-top: 1rem;
+}
+
+.acquisition-review-panel {
+  width: 100%;
+}
+
+.acquisition-hidden-list {
+  display: none;
 }
 
 .subsection-title {
@@ -1998,6 +2004,36 @@ header {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+}
+
+.acquisition-review-list {
+  gap: 0.75rem;
+}
+
+.acquisition-review-group {
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid var(--border-color);
+  border-radius: 0.8rem;
+}
+
+.acquisition-review-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.acquisition-review-head > div:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+
+.acquisition-evidence-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  padding-left: 1.75rem;
 }
 
 .acquisition-item {
@@ -2067,6 +2103,14 @@ header {
   color: var(--color-info);
   font-size: 0.72rem;
   font-weight: 700;
+}
+
+.acquisition-evidence-item {
+  background: var(--bg-deep);
+}
+
+.inline-empty {
+  padding: 0.55rem 0;
 }
 
 .log-explainability-badge {

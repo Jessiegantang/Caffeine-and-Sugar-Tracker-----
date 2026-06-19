@@ -398,18 +398,13 @@ async function renderKnowledgeAcquisitionPanel() {
       ? candidates.map(candidate => `<option value="${candidate.id}">${candidate.brand || '-'} ${candidate.name}</option>`).join('')
       : '<option value="">暂无候选</option>';
 
-    candidateList.innerHTML = candidates.length
-      ? candidates.map(candidate => renderCandidateItem(candidate)).join('')
-      : '<div class="acquisition-empty">暂无候选</div>';
+    candidateList.innerHTML = renderReviewQueue(candidates, evidenceRows);
+    evidenceList.innerHTML = '';
 
-    evidenceList.innerHTML = evidenceRows.length
-      ? evidenceRows.map(evidence => renderEvidenceItem(evidence)).join('')
-      : '<div class="acquisition-empty">暂无证据</div>';
-
-    evidenceList.querySelectorAll('.approve-evidence-btn').forEach(btn => {
+    candidateList.querySelectorAll('.approve-evidence-btn').forEach(btn => {
       btn.addEventListener('click', () => handleApproveEvidence(btn.dataset.evidenceId));
     });
-    evidenceList.querySelectorAll('.delete-evidence-btn').forEach(btn => {
+    candidateList.querySelectorAll('.delete-evidence-btn').forEach(btn => {
       btn.addEventListener('click', () => handleDeleteEvidence(btn.dataset.evidenceId));
     });
     candidateList.querySelectorAll('.delete-candidate-btn').forEach(btn => {
@@ -421,17 +416,63 @@ async function renderKnowledgeAcquisitionPanel() {
   }
 }
 
-function renderCandidateItem(candidate) {
-  return `
-    <div class="acquisition-item">
-      <input type="checkbox" class="candidate-select" value="${candidate.id}" aria-label="选择候选">
-      <div>
-        <div class="acquisition-title">${candidate.brand || '-'} ${candidate.name}</div>
-        <div class="acquisition-meta">${candidate.type || '-'} · ${candidate.status || '-'} · 置信度 ${formatConfidence(candidate.confidence)}</div>
+function renderReviewQueue(candidates, evidenceRows) {
+  if (!candidates.length && !evidenceRows.length) {
+    return '<div class="acquisition-empty">暂无待审核内容</div>';
+  }
+
+  const evidenceByCandidate = new Map();
+  evidenceRows.forEach(evidence => {
+    const key = evidence.candidate_id || '';
+    if (!evidenceByCandidate.has(key)) evidenceByCandidate.set(key, []);
+    evidenceByCandidate.get(key).push(evidence);
+  });
+
+  const candidateCards = candidates.map(candidate => (
+    renderCandidateReviewItem(candidate, evidenceByCandidate.get(candidate.id) || [])
+  ));
+
+  const orphanEvidence = evidenceRows.filter(evidence => (
+    !evidence.candidate_id || !candidates.some(candidate => candidate.id === evidence.candidate_id)
+  ));
+  const orphanBlock = orphanEvidence.length
+    ? `
+      <div class="acquisition-review-group">
+        <div class="acquisition-review-head">
+          <div>
+            <div class="acquisition-title">未匹配证据</div>
+            <div class="acquisition-meta">这些证据没有找到对应候选，可单独入库或删除。</div>
+          </div>
+        </div>
+        <div class="acquisition-evidence-stack">
+          ${orphanEvidence.map(evidence => renderEvidenceItem(evidence)).join('')}
+        </div>
       </div>
-      <div class="acquisition-actions">
-        <span class="mini-badge">${candidate.discovery_method || 'manual'}</span>
-        <button type="button" class="mini-danger-btn delete-candidate-btn" data-candidate-id="${candidate.id}">删除</button>
+    `
+    : '';
+
+  return [...candidateCards, orphanBlock].join('');
+}
+
+function renderCandidateReviewItem(candidate, evidenceRows = []) {
+  const evidenceCountText = evidenceRows.length ? `${evidenceRows.length} 条证据` : '暂无证据';
+  return `
+    <div class="acquisition-review-group">
+      <div class="acquisition-review-head">
+        <input type="checkbox" class="candidate-select" value="${candidate.id}" aria-label="选择候选">
+        <div>
+          <div class="acquisition-title">${escapeHtml(candidate.brand || '-')} ${escapeHtml(candidate.name)}</div>
+          <div class="acquisition-meta">${candidate.type || '-'} · ${candidate.status || '-'} · ${evidenceCountText} · 置信度 ${formatConfidence(candidate.confidence)}</div>
+        </div>
+        <div class="acquisition-actions">
+          <span class="mini-badge">${candidate.discovery_method || 'manual'}</span>
+          <button type="button" class="mini-danger-btn delete-candidate-btn" data-candidate-id="${candidate.id}">删除候选</button>
+        </div>
+      </div>
+      <div class="acquisition-evidence-stack">
+        ${evidenceRows.length
+          ? evidenceRows.map(evidence => renderEvidenceItem(evidence)).join('')
+          : '<div class="acquisition-empty inline-empty">还没有证据，可以在上方添加证据文本。</div>'}
       </div>
     </div>
   `;
@@ -440,7 +481,7 @@ function renderCandidateItem(candidate) {
 function renderEvidenceItem(evidence) {
   const extracted = evidence.extracted || {};
   return `
-    <div class="acquisition-item">
+    <div class="acquisition-item acquisition-evidence-item">
       <input type="checkbox" class="evidence-select" value="${evidence.id}" aria-label="选择证据">
       <div>
         <div class="acquisition-title">${evidence.source_type || 'manual'} · ${evidence.status || '-'}</div>
@@ -774,6 +815,15 @@ function escapeAttr(value) {
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function getCheckedValues(selector) {

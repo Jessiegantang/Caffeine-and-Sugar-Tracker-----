@@ -6,6 +6,9 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 load_dotenv()
 
+if not os.getenv("OPENAI_API_KEY") and os.getenv("\ufeffOPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = os.getenv("\ufeffOPENAI_API_KEY", "")
+
 base_url = os.getenv("BASE_URL")
 api_key = os.getenv("OPENAI_API_KEY", "dummy_key_if_none")
 model_name = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
