@@ -57,8 +57,12 @@ SIZE_ALIASES = [
     (650, ["\u8d85\u5927\u676f", "\u5de8\u676f"]),
 ]
 
-LOG_KEYWORDS = ["\u559d", "\u4e70", "\u6765\u4e00\u676f", "\u8bb0\u5f55", "\u52a0\u4e00\u6761", "\u70b9\u4e86", "\u521a\u521a", "\u521a\u624d"]
-ADVICE_KEYWORDS = ["\u8fd8\u80fd\u559d", "\u5efa\u8bae", "\u63a8\u8350", "\u53ef\u4ee5\u559d", "\u9002\u5408", "\u5065\u5eb7\u5417"]
+LOG_KEYWORDS = ["\u559d", "\u4e70", "\u6765\u4e00\u676f", "\u8bb0\u5f55", "\u8bb0\u4e00\u4e0b", "\u5e2e\u6211\u8bb0\u4e00\u4e0b", "\u52a0\u4e00\u6761", "\u70b9\u4e86", "\u521a\u521a", "\u521a\u624d"]
+ADVICE_KEYWORDS = [
+    "\u8fd8\u80fd\u559d", "\u8fd8\u53ef\u4ee5", "\u53ef\u4ee5\u559d", "\u80fd\u559d", "\u5efa\u8bae", "\u63a8\u8350",
+    "\u9002\u5408", "\u5065\u5eb7\u5417", "\u600e\u4e48\u529e", "\u9884\u7b97", "\u989d\u5ea6", "\u9ad8\u4e0d\u9ad8", "\u662f\u4e0d\u662f",
+    "\u5417", "?",
+]
 SYMPTOM_KEYWORDS = [
     "\u5e72\u5455", "\u6076\u5fc3", "\u60f3\u5410", "\u53cd\u80c3", "\u80c3\u4e0d\u8212\u670d", "\u80c3\u75bc",
     "\u5fc3\u614c", "\u5934\u6655", "\u96be\u53d7", "\u4e0d\u8212\u670d", "\u62c9\u809a\u5b50", "\u809a\u5b50\u75bc",
@@ -91,8 +95,13 @@ def _infer_volume(text: str) -> int | None:
     match = re.search(r"(\d{2,4})\s*(?:ml|mL|ML|\u6beb\u5347)", text)
     if match:
         return int(match.group(1))
-    for volume, aliases in SIZE_ALIASES:
-        if any(alias in text for alias in aliases):
+    size_aliases = [
+        (len(alias), volume, alias)
+        for volume, aliases in SIZE_ALIASES
+        for alias in aliases
+    ]
+    for _, volume, alias in sorted(size_aliases, reverse=True):
+        if alias in text:
             return volume
     return None
 
@@ -137,11 +146,26 @@ def _infer_time(text: str) -> str:
     return "now"
 
 
+def _has_drink_signal(text: str) -> bool:
+    lowered = text.lower()
+    has_brand = any(alias.lower() in lowered for _, aliases in KNOWN_BRAND_ALIASES for alias in aliases)
+    has_suffix = any(suffix.lower() in lowered for suffix in DRINK_SUFFIXES)
+    has_volume = _infer_volume(text) is not None
+    has_sugar = _infer_sugar(text) is not None
+    return has_suffix and (has_brand or has_volume or has_sugar)
+
+
 def _infer_brand(text: str) -> str | None:
     lowered = text.lower()
+    matches: list[tuple[int, str]] = []
     for brand, aliases in KNOWN_BRAND_ALIASES:
-        if any(alias.lower() in lowered for alias in aliases):
-            return brand
+        for alias in aliases:
+            alias_lower = alias.lower()
+            if alias_lower in lowered:
+                matches.append((len(alias_lower), brand))
+    if matches:
+        matches.sort(reverse=True)
+        return matches[0][1]
     return None
 
 
@@ -149,19 +173,29 @@ def _infer_name(text: str, brand: str | None) -> str | None:
     cleaned = _remove_known_context(text, brand)
     suffix_name = _extract_name_by_suffix(cleaned)
     if suffix_name:
-        return suffix_name
+        return _normalize_extracted_name(suffix_name)
 
     parts = [p.strip(" ,.\uff0c\u3002!\uff01?\uff1f\u3001") for p in re.split(r"[\s,\uff0c\u3002!\uff01?\uff1f\u3001]+", cleaned)]
     candidates = [p for p in parts if len(p) >= 2 and not p.isdigit()]
+    if not candidates and brand in {"可口可乐", "百事可乐"} and "可乐" in text:
+        return "可乐"
+    if not candidates and brand == "Tims" and "咖啡" in text:
+        return "咖啡"
     if not candidates:
         return None
-    return max(candidates, key=len)
+    return _normalize_extracted_name(max(candidates, key=len))
+
+
+def _normalize_extracted_name(name: str) -> str:
+    if name.startswith("茶柠檬茶"):
+        return "柠檬茶"
+    return name
 
 
 def _remove_known_context(text: str, brand: str | None) -> str:
     cleaned = text
     remove_tokens = [
-        "\u6211", "\u521a\u559d\u4e86", "\u521a\u559d", "\u559d\u4e86", "\u4e70\u4e86", "\u70b9\u4e86",
+        "\u6211", "\u521a\u559d\u4e86\u70b9", "\u559d\u4e86\u70b9", "\u521a\u559d\u4e86", "\u521a\u559d", "\u559d\u4e86", "\u4e70\u4e86", "\u70b9\u4e86",
         "\u6765\u4e00\u676f", "\u8bb0\u5f55", "\u52a0\u4e00\u6761", "\u4e00\u676f", "\u4e00\u74f6",
         "\u4eca\u5929", "\u73b0\u5728", "\u521a\u521a", "\u521a\u624d", "\u4e0a\u5348", "\u4e0b\u5348", "\u665a\u4e0a",
     ]
@@ -219,7 +253,14 @@ def _build_follow_up(missing_fields: list[str]) -> str | None:
 
 def _parse_intake_locally(user_message: str) -> dict:
     text = user_message.strip()
-    intent = "log_drink" if any(keyword in text for keyword in LOG_KEYWORDS) else "ask_advice"
+    has_explicit_log = any(keyword in text for keyword in LOG_KEYWORDS)
+    has_advice_marker = any(keyword in text for keyword in ADVICE_KEYWORDS)
+    if has_advice_marker and not any(keyword in text for keyword in ["\u8bb0\u5f55", "\u52a0\u4e00\u6761", "\u8bb0\u4e00\u4e0b", "\u5e2e\u6211\u8bb0\u4e00\u4e0b"]):
+        intent = "ask_advice"
+    elif has_explicit_log or _has_drink_signal(text):
+        intent = "log_drink"
+    else:
+        intent = "ask_advice"
     if any(keyword in text for keyword in SYMPTOM_KEYWORDS) and not any(keyword in text for keyword in ["\u8bb0\u5f55", "\u52a0\u4e00\u6761"]):
         intent = "ask_advice"
     if intent != "log_drink" and any(keyword in text for keyword in ADVICE_KEYWORDS):

@@ -55,12 +55,14 @@ def run_report(*, compare_llm: bool = False) -> dict:
             os.environ["ENABLE_LLM"] = original_enable_llm
         cleanup_cases(cases)
 
+    metrics = _aggregate_metrics(rows)
     summary = {
         "total": len(rows),
         "passed": sum(1 for row in rows if row["passed"]),
         "failed": sum(1 for row in rows if not row["passed"]),
         "intent_distribution": dict(Counter(row["intent"] for row in rows)),
         "action_distribution": dict(Counter(row["final_action"] for row in rows)),
+        "metrics": metrics,
         "llm_comparison": "skipped" if not compare_llm else "not_implemented_for_quality_gate",
     }
     return {"rows": rows, "summary": summary}
@@ -72,10 +74,16 @@ def evaluate_case(case: dict) -> dict:
 
     result = _run_case_once(case)
     failures.extend(_check_expected(case, result))
+    metrics = _score_case(case, result)
 
     if expected.get("offline_stable"):
         second = _run_case_once(case)
-        failures.extend(_check_stability(result, second))
+        stability_failures = _check_stability(result, second)
+        failures.extend(stability_failures)
+        metrics["offline_stability"] = {
+            "correct": 0 if stability_failures else 1,
+            "total": 1,
+        }
 
     return {
         "id": case["id"],
@@ -85,9 +93,108 @@ def evaluate_case(case: dict) -> dict:
         "nutrition_method": (result.get("nutrition_result") or {}).get("estimation_method"),
         "tools": result.get("tools_used") or [],
         "retrieved_docs": result.get("retrieved_docs") or [],
+        "metrics": metrics,
         "passed": not failures,
         "failures": failures,
     }
+
+
+def _score_case(case: dict, result: dict) -> dict:
+    expected = case.get("expected", {})
+    parsed = result.get("parsed_drink") or {}
+    nutrition = result.get("nutrition_result") or {}
+    risk_result = result.get("risk_result") or {}
+    explainability = nutrition.get("explainability") or {}
+    tools = result.get("tools_used") or []
+    trace = explainability.get("graph_trace") or []
+    trace_ids = [_trace_id(event) for event in trace]
+
+    metrics: dict[str, dict[str, int]] = {}
+
+    def add_metric(name: str, correct: bool, enabled: bool = True) -> None:
+        if enabled:
+            metrics[name] = {"correct": 1 if correct else 0, "total": 1}
+
+    add_metric("intent_accuracy", result.get("intent") == expected.get("intent"), expected.get("intent") is not None)
+    add_metric(
+        "final_action_accuracy",
+        result.get("final_action") == expected.get("final_action"),
+        expected.get("final_action") is not None,
+    )
+    add_metric(
+        "risk_level_accuracy",
+        risk_result.get("risk_level") == expected.get("risk_level"),
+        expected.get("risk_level") is not None,
+    )
+    add_metric(
+        "nutrition_method_accuracy",
+        nutrition.get("estimation_method") == expected.get("nutrition_method"),
+        expected.get("nutrition_method") is not None,
+    )
+    add_metric(
+        "used_composition_accuracy",
+        explainability.get("used_composition") == expected.get("used_composition"),
+        expected.get("used_composition") is not None,
+    )
+    add_metric(
+        "used_knowledge_match_accuracy",
+        explainability.get("used_knowledge_match") == expected.get("used_knowledge_match"),
+        expected.get("used_knowledge_match") is not None,
+    )
+
+    parsed_fields = expected.get("parsed_fields") or {}
+    if parsed_fields:
+        correct = sum(1 for key, value in parsed_fields.items() if parsed.get(key) == value)
+        metrics["parsed_field_accuracy"] = {"correct": correct, "total": len(parsed_fields)}
+
+    missing_fields = expected.get("required_missing_fields") or []
+    if missing_fields:
+        actual_missing = parsed.get("missing_fields") or []
+        correct = sum(1 for field in missing_fields if field in actual_missing)
+        metrics["missing_field_recall"] = {"correct": correct, "total": len(missing_fields)}
+
+    required_tools = expected.get("required_tools") or []
+    if required_tools:
+        correct = sum(1 for tool in required_tools if tool in tools)
+        metrics["required_tool_recall"] = {"correct": correct, "total": len(required_tools)}
+
+    forbidden_tools = expected.get("forbidden_tools") or []
+    if forbidden_tools:
+        correct = sum(1 for tool in forbidden_tools if tool not in tools)
+        metrics["forbidden_tool_accuracy"] = {"correct": correct, "total": len(forbidden_tools)}
+
+    expected_trace_ids = expected.get("trace_ids") or []
+    if expected_trace_ids:
+        correct = sum(1 for trace_id in expected_trace_ids if trace_id in trace_ids)
+        metrics["trace_node_recall"] = {"correct": correct, "total": len(expected_trace_ids)}
+
+    if expected.get("trace_event_shape"):
+        required_keys = ["id", "label", "phase", "agent", "status", "summary"]
+        valid_events = [
+            event
+            for event in trace
+            if isinstance(event, dict) and all(key in event for key in required_keys)
+        ]
+        metrics["trace_event_shape_accuracy"] = {
+            "correct": len(valid_events),
+            "total": len(trace) or 1,
+        }
+
+    return metrics
+
+
+def _aggregate_metrics(rows: list[dict]) -> dict:
+    totals: dict[str, dict[str, int | float]] = {}
+    for row in rows:
+        for name, metric in (row.get("metrics") or {}).items():
+            bucket = totals.setdefault(name, {"correct": 0, "total": 0, "rate": 0.0})
+            bucket["correct"] += metric.get("correct", 0)
+            bucket["total"] += metric.get("total", 0)
+    for metric in totals.values():
+        total = int(metric["total"])
+        correct = int(metric["correct"])
+        metric["rate"] = round(correct / total, 4) if total else 0.0
+    return totals
 
 
 def _run_case_once(case: dict) -> dict:
@@ -269,7 +376,7 @@ def format_table(rows: list[dict]) -> str:
 
 
 def format_summary(summary: dict) -> str:
-    return "\n".join([
+    lines = [
         "",
         "Summary",
         "-------",
@@ -278,8 +385,16 @@ def format_summary(summary: dict) -> str:
         f"Failed: {summary['failed']}",
         f"Intent distribution: {summary['intent_distribution']}",
         f"Action distribution: {summary['action_distribution']}",
-        f"LLM comparison: {summary['llm_comparison']}",
-    ])
+        "",
+        "Metrics",
+        "-------",
+    ]
+    for name, metric in summary.get("metrics", {}).items():
+        lines.append(
+            f"{name}: {metric['correct']}/{metric['total']} ({metric['rate']:.2%})"
+        )
+    lines.append(f"LLM comparison: {summary['llm_comparison']}")
+    return "\n".join(lines)
 
 
 def write_markdown_report(report: dict) -> None:
@@ -294,16 +409,12 @@ def write_markdown_report(report: dict) -> None:
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in rows:
+        result = "PASS" if row["passed"] else "FAIL"
+        failures = "<br>".join(row["failures"]) if row["failures"] else "-"
         lines.append(
-            "| {id} | {intent} | {final_action} | {risk_level} | {nutrition_method} | {result} | {failures} |".format(
-                **row,
-                intent=row.get("intent") or "-",
-                final_action=row.get("final_action") or "-",
-                risk_level=row.get("risk_level") or "-",
-                nutrition_method=row.get("nutrition_method") or "-",
-                result="PASS" if row["passed"] else "FAIL",
-                failures="<br>".join(row["failures"]) if row["failures"] else "-",
-            )
+            f"| {row['id']} | {row.get('intent') or '-'} | "
+            f"{row.get('final_action') or '-'} | {row.get('risk_level') or '-'} | "
+            f"{row.get('nutrition_method') or '-'} | {result} | {failures} |"
         )
     lines.extend([
         "",
@@ -316,7 +427,12 @@ def write_markdown_report(report: dict) -> None:
         f"- Action distribution: {summary['action_distribution']}",
         f"- LLM comparison: {summary['llm_comparison']}",
         "",
+        "## Metrics",
+        "",
     ])
+    for name, metric in summary.get("metrics", {}).items():
+        lines.append(f"- {name}: {metric['correct']}/{metric['total']} ({metric['rate']:.2%})")
+    lines.append("")
     REPORT_PATH.write_text("\n".join(lines), encoding="utf-8")
 
 

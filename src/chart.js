@@ -24,11 +24,11 @@ export function renderWeeklyChart(container, logs, weekDates) {
 
   // Chart SVG settings
   const width = 600;
-  const height = 240;
-  const paddingLeft = 45;
-  const paddingRight = 15;
-  const paddingTop = 30;
-  const paddingBottom = 40;
+  const height = 248;
+  const paddingLeft = 52;
+  const paddingRight = 24;
+  const paddingTop = 28;
+  const paddingBottom = 52;
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
 
@@ -58,8 +58,8 @@ export function renderWeeklyChart(container, logs, weekDates) {
     // Gridline
     svgHTML += `
       <line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" 
-            stroke="#dce6e2" stroke-dasharray="4,4" stroke-width="1" />
-      <text x="${paddingLeft - 8}" y="${y + 4}" fill="#71858b" font-size="10" font-family="Plus Jakarta Sans" text-anchor="end">
+            stroke="#e7eeeb" stroke-dasharray="5,7" stroke-width="1" />
+      <text x="${paddingLeft - 10}" y="${y + 4}" fill="#7b8d94" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="end">
         ${label}
       </text>
     `;
@@ -68,8 +68,9 @@ export function renderWeeklyChart(container, logs, weekDates) {
   // Calculate X-axis spacing
   const dayCount = weekDates.length;
   const dayColWidth = chartWidth / dayCount;
-  const barWidth = 14;
-  const barSpacing = 4; // Gap between caffeine and sugar bars
+  const slotWidth = Math.min(48, dayColWidth - 14);
+  const barWidth = 12;
+  const barSpacing = 8; // Gap between caffeine and sugar bars
 
   // Render Bars for each day
   dailyTotals.forEach((day, index) => {
@@ -92,25 +93,31 @@ export function renderWeeklyChart(container, logs, weekDates) {
     const mStr = day.date.split('-')[1];
     const shortDate = `${mStr}-${dStr}`;
 
+    svgHTML += `
+      <rect x="${xCenter - slotWidth / 2}" y="${paddingTop}" width="${slotWidth}" height="${chartHeight}" 
+            rx="12" fill="#fbfdff" stroke="#edf3f5" class="weekly-chart-day-slot" />
+    `;
+
     // Caffeine Bar Rect
     svgHTML += `
-      <rect x="${cafX}" y="${cafY}" width="${barWidth}" height="${Math.max(cafBarH, 1)}" 
-            rx="4" fill="url(#chart-caffeine-grad)" class="chart-bar bar-caffeine">
+      <rect x="${cafX}" y="${cafY}" width="${barWidth}" height="${cafBarH}" 
+            rx="6" fill="url(#chart-caffeine-grad)" class="weekly-chart-bar bar-caffeine">
         <title>日期: ${day.date}\n咖啡因: ${day.caffeine}mg (${Math.round(cafRatio * 100)}% 推荐限额)</title>
       </rect>
     `;
 
     // Sugar Bar Rect
     svgHTML += `
-      <rect x="${sugX}" y="${sugY}" width="${barWidth}" height="${Math.max(sugBarH, 1)}" 
-            rx="4" fill="url(#chart-sugar-grad)" class="chart-bar bar-sugar">
+      <rect x="${sugX}" y="${sugY}" width="${barWidth}" height="${sugBarH}" 
+            rx="6" fill="url(#chart-sugar-grad)" class="weekly-chart-bar bar-sugar">
         <title>日期: ${day.date}\n糖分: ${day.sugar.toFixed(1)}g (${Math.round(sugRatio * 100)}% 推荐限额)</title>
       </rect>
     `;
 
     // X-axis label
     svgHTML += `
-      <text x="${xCenter}" y="${height - paddingBottom + 18}" fill="#8a9ca1" font-size="10" font-family="Plus Jakarta Sans" text-anchor="middle">
+      <rect x="${xCenter - 21}" y="${height - paddingBottom + 14}" width="42" height="20" rx="10" fill="#f3f7f8" stroke="#e1eaec" />
+      <text x="${xCenter}" y="${height - paddingBottom + 28}" fill="#6f828a" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">
         ${shortDate}
       </text>
     `;
@@ -119,19 +126,19 @@ export function renderWeeklyChart(container, logs, weekDates) {
   // Draw X Axis Baseline
   svgHTML += `
     <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" 
-          stroke="#cbdad5" stroke-width="1.5" />
+          stroke="#d5e1de" stroke-width="1.5" stroke-linecap="round" />
   `;
 
   // Define Gradients & Styles
   svgHTML += `
     <defs>
       <linearGradient id="chart-caffeine-grad" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%" stop-color="#2f8f83" stop-opacity="0.78"/>
-        <stop offset="100%" stop-color="#6fc0a8" stop-opacity="0.95"/>
+        <stop offset="0%" stop-color="#5f8ea8" stop-opacity="0.92"/>
+        <stop offset="100%" stop-color="#9fc7d8" stop-opacity="1"/>
       </linearGradient>
       <linearGradient id="chart-sugar-grad" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%" stop-color="#d59a22" stop-opacity="0.72"/>
-        <stop offset="100%" stop-color="#f0c96b" stop-opacity="0.9"/>
+        <stop offset="0%" stop-color="#789b87" stop-opacity="0.9"/>
+        <stop offset="100%" stop-color="#b7d3c0" stop-opacity="1"/>
       </linearGradient>
     </defs>
   </svg>

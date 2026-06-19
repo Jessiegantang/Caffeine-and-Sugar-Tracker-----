@@ -159,6 +159,15 @@ cd backend
 .\venv\Scripts\python.exe tests\run_agent_effect_eval_report.py
 ```
 
+运行自建模拟输入评估：
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe tests\run_synthetic_agent_eval_report.py --compare-baseline --write-doc
+```
+
+该评估集覆盖完整饮品记录、缺字段追问、品牌别名、口语表达和摄入建议等 100 条固定模拟输入，用于量化意图识别、动作选择、字段解析和缺字段召回表现。`--compare-baseline` 会在同一批数据上对比 legacy baseline 与当前规则，生成 `docs/synthetic_agent_eval_report.md`。它是固定场景下的离线评估，不代表生产环境真实准确率。
+
 运行完整本地质量检查：
 
 ```powershell

@@ -15,13 +15,13 @@
   --text-muted: #8a9ca1;
   
   /* Accents */
-  --caffeine-primary: #2f8f83;
-  --caffeine-gradient: linear-gradient(135deg, #2f8f83, #61b89f);
-  --caffeine-glow: rgba(47, 143, 131, 0.18);
+  --caffeine-primary: #5f8ea8;
+  --caffeine-gradient: linear-gradient(135deg, #5f8ea8, #9fc7d8);
+  --caffeine-glow: rgba(95, 142, 168, 0.16);
   
-  --sugar-primary: #e0a42f;
-  --sugar-gradient: linear-gradient(135deg, #e0a42f, #f3c766);
-  --sugar-glow: rgba(224, 164, 47, 0.18);
+  --sugar-primary: #789b87;
+  --sugar-gradient: linear-gradient(135deg, #789b87, #b7d3c0);
+  --sugar-glow: rgba(120, 155, 135, 0.16);
   
   /* Status Colors */
   --color-success: #7cb79e;
@@ -2666,35 +2666,51 @@ body {
 
 .chart-container-box {
   min-height: 260px;
-  padding: 12px;
-  background: #fbfdfc;
-  border: 1px solid var(--border-color);
+  padding: 14px 14px 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
+  border: 1px solid #dbe7e9;
   border-radius: 8px;
   overflow: hidden;
 }
 
 .weekly-svg-chart {
   display: block;
+  min-height: 238px;
 }
 
-.weekly-svg-chart .chart-bar {
+.weekly-svg-chart .weekly-chart-bar {
+  shape-rendering: geometricPrecision;
+}
+
+.weekly-svg-chart .weekly-chart-day-slot {
   shape-rendering: geometricPrecision;
 }
 
 .weekly-svg-chart .bar-caffeine {
-  filter: drop-shadow(0 5px 8px rgba(47, 143, 131, 0.12));
+  filter: drop-shadow(0 6px 9px rgba(95, 142, 168, 0.15));
 }
 
 .weekly-svg-chart .bar-sugar {
-  filter: drop-shadow(0 5px 8px rgba(213, 154, 34, 0.1));
+  filter: drop-shadow(0 6px 9px rgba(120, 155, 135, 0.14));
 }
 
 .chart-legends-row {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   margin: 4px 0 12px;
   color: var(--text-secondary);
   font-size: 0.86rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid #e0e8eb;
+  border-radius: 999px;
+  background: #f8fbfc;
+  font-weight: 700;
 }
 
 .legend-dot {
@@ -2702,7 +2718,7 @@ body {
   height: 9px;
   display: inline-block;
   border-radius: 999px;
-  margin-right: 6px;
+  margin-right: 0;
 }
 
 .dot-caffeine {
