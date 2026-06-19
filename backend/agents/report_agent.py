@@ -1,5 +1,6 @@
 import json
 import os
+from collections import defaultdict
 from typing import List
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -8,11 +9,15 @@ from pydantic import BaseModel, Field
 from .llm_config import llm, llm_enabled
 
 
+CAFFEINE_LIMIT_MG = 400.0
+SUGAR_LIMIT_G = 50.0
+
+
 class InsightItem(BaseModel):
-    level: str = Field(description="Insight level: info, warning, success, danger.")
-    icon: str = Field(description="A suitable short icon or emoji.")
-    title: str = Field(description="Short Chinese insight title. Must be Chinese only.")
-    message: str = Field(description="Warm Chinese companion-style insight message. Must be Chinese only.")
+    level: str = Field(description="One of: info, warning, success, danger.")
+    icon: str = Field(description="A short icon.")
+    title: str = Field(description="Short Simplified Chinese insight title.")
+    message: str = Field(description="Concrete Simplified Chinese insight message.")
 
 
 class ReportOutput(BaseModel):
@@ -22,66 +27,61 @@ class ReportOutput(BaseModel):
 def generate_health_report(logs: list, report_type: str) -> dict:
     if not logs:
         return {"insights": []}
+
+    local_report = _generate_local_report(logs, report_type)
     if not llm_enabled():
-        return _generate_local_report(logs, report_type)
-
-    system_prompt = f"""你是 DrinkMind Companion，一个温和、克制的饮品健康分析助手。
-请根据用户的饮品记录生成{report_type}摄入分析报告。
-
-语言要求：
-- 必须只使用简体中文。
-- title 和 message 都不要出现英文。
-- 不要同时输出英文和中文两套内容。
-- 饮品名可以保留用户原文，但解释、建议、标题必须是中文。
-
-Tone:
-- 友好、平静、不评判。
-- 不要说教，不要像严格健身教练。
-
-分析重点：
-- 咖啡因摄入量和饮用时间，尤其是偏晚摄入。
-- 糖分摄入量，以及是否需要温和提醒。
-- 如果记录中看得出来，可观察多日重复摄入习惯。
-
-返回要求：
-- 返回 1 到 3 条核心 insight。
-- 每条 insight 必须包含 level、title、message、icon。
-- 严格兼容 structured output schema。"""
-
-    user_prompt = "最近饮品记录：\n{logs_text}\n请只用简体中文生成分析报告 insights。"
+        return local_report
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("user", user_prompt),
+        ("system", _build_system_prompt(report_type)),
+        ("user", "饮品记录 JSON:\n{logs_text}\n\n统计摘要 JSON:\n{stats_text}\n\n请生成报告。"),
     ])
-
-    if _prefer_json_mode():
-        try:
-            return _normalize_report(_generate_report_json(prompt, logs), logs, report_type)
-        except Exception as fallback_error:
-            print(f"[Report Agent JSON Error] {fallback_error}", flush=True)
-            return _generate_local_report(logs, report_type)
+    payload = {
+        "logs_text": json.dumps(_compact_logs(logs), ensure_ascii=False),
+        "stats_text": json.dumps(_build_stats(logs), ensure_ascii=False),
+    }
 
     try:
-        structured_llm = llm.with_structured_output(ReportOutput, method="function_calling")
-        chain = prompt | structured_llm
-        result = chain.invoke({"logs_text": json.dumps(logs, ensure_ascii=False)})
-        return _normalize_report(result.dict(), logs, report_type)
-    except Exception as e:
-        print(f"[Report Agent Error] {e}", flush=True)
-        try:
-            return _normalize_report(_generate_report_json(prompt, logs), logs, report_type)
-        except Exception as fallback_error:
-            print(f"[Report Agent JSON Fallback Error] {fallback_error}", flush=True)
-            return _generate_local_report(logs, report_type)
+        if _prefer_json_mode():
+            report = _generate_report_json(prompt, payload)
+        else:
+            structured_llm = llm.with_structured_output(ReportOutput, method="function_calling")
+            report = (prompt | structured_llm).invoke(payload).dict()
+        return _normalize_report(report, logs, report_type)
+    except Exception as error:
+        print(f"[Report Agent Error] {error}", flush=True)
+        return local_report
 
 
 def generate_report(logs: list, report_type: str) -> dict:
     return generate_health_report(logs, report_type)
 
 
-def _generate_report_json(prompt: ChatPromptTemplate, logs: list) -> dict:
-    response = (prompt | llm).invoke({"logs_text": json.dumps(logs, ensure_ascii=False)})
+def _build_system_prompt(report_type: str) -> str:
+    scope = "当天" if report_type == "日度" else "近 7 天"
+    return f"""你是 DrinkMind 的饮品摄入分析 Agent。
+任务：根据用户的{report_type}饮品记录，生成{scope}咖啡因和糖分分析。
+
+必须遵守：
+- 只输出合法 JSON，不要 markdown。
+- JSON 顶层必须只有 insights 字段，insights 是对象数组。
+- 每个 insight 对象必须包含 level、icon、title、message 四个字段。
+- insights 数量 1 到 3 条。
+- level 只能是 info、warning、success、danger。
+- title 和 message 必须是简体中文。
+- 不要空泛夸奖，不要在超标时说“优秀/完美/理想”。
+
+分析要求：
+- 必须同时考虑咖啡因总量、糖分总量、饮用时间、饮品类型和主要贡献饮品。
+- 如果糖分 > 50g，至少一条 warning/danger 必须明确说糖分超出日建议量。
+- 如果咖啡因 > 400mg，至少一条 warning/danger 必须明确说咖啡因超出日建议量。
+- 如果没有超标，也要说明距离上限还剩多少，而不是只说“很好”。
+- 建议必须具体，例如“下一杯选无糖茶/白水/无糖美式”，不要泛泛说“注意健康”。
+"""
+
+
+def _generate_report_json(prompt: ChatPromptTemplate, payload: dict) -> dict:
+    response = (prompt | llm).invoke(payload)
     content = getattr(response, "content", response)
     if isinstance(content, list):
         content = "".join(str(item) for item in content)
@@ -97,6 +97,10 @@ def _strip_json_fence(text: str) -> str:
         stripped = stripped.strip("`").strip()
         if stripped.lower().startswith("json"):
             stripped = stripped[4:].strip()
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start >= 0 and end > start:
+        return stripped[start:end + 1]
     return stripped
 
 
@@ -106,50 +110,130 @@ def _prefer_json_mode() -> bool:
     return "dashscope" in base_url or "qwen" in model_name
 
 
-def _generate_local_report(logs: list, report_type: str) -> dict:
+def _compact_logs(logs: list) -> list:
+    keys = ["date", "brand", "name", "type", "sugar", "volume", "startTime", "caffeine", "sugarContent"]
+    return [{key: log.get(key) for key in keys} for log in logs]
+
+
+def _build_stats(logs: list) -> dict:
     caffeine_total = sum(float(log.get("caffeine") or 0) for log in logs)
     sugar_total = sum(float(log.get("sugarContent") or 0) for log in logs)
+    dates = sorted({log.get("date") for log in logs if log.get("date")})
+    top_caffeine = sorted(logs, key=lambda item: float(item.get("caffeine") or 0), reverse=True)[:3]
+    top_sugar = sorted(logs, key=lambda item: float(item.get("sugarContent") or 0), reverse=True)[:3]
+    return {
+        "caffeine_total_mg": round(caffeine_total, 1),
+        "sugar_total_g": round(sugar_total, 1),
+        "caffeine_limit_mg": CAFFEINE_LIMIT_MG,
+        "sugar_limit_g": SUGAR_LIMIT_G,
+        "caffeine_remaining_mg": round(CAFFEINE_LIMIT_MG - caffeine_total, 1),
+        "sugar_remaining_g": round(SUGAR_LIMIT_G - sugar_total, 1),
+        "record_count": len(logs),
+        "active_days": len(dates),
+        "top_caffeine_drinks": [_drink_label(log) for log in top_caffeine],
+        "top_sugar_drinks": [_drink_label(log) for log in top_sugar],
+        "daily_totals": _daily_totals(logs),
+    }
+
+
+def _daily_totals(logs: list) -> list:
+    totals = defaultdict(lambda: {"caffeine": 0.0, "sugar": 0.0, "count": 0})
+    for log in logs:
+        date = log.get("date") or "unknown"
+        totals[date]["caffeine"] += float(log.get("caffeine") or 0)
+        totals[date]["sugar"] += float(log.get("sugarContent") or 0)
+        totals[date]["count"] += 1
+    return [
+        {
+            "date": date,
+            "caffeine": round(value["caffeine"], 1),
+            "sugar": round(value["sugar"], 1),
+            "count": value["count"],
+        }
+        for date, value in sorted(totals.items())
+    ]
+
+
+def _drink_label(log: dict) -> dict:
+    return {
+        "date": log.get("date"),
+        "name": " ".join(part for part in [log.get("brand"), log.get("name")] if part),
+        "time": log.get("startTime"),
+        "caffeine": round(float(log.get("caffeine") or 0), 1),
+        "sugar": round(float(log.get("sugarContent") or 0), 1),
+    }
+
+
+def _generate_local_report(logs: list, report_type: str) -> dict:
+    stats = _build_stats(logs)
+    caffeine_total = stats["caffeine_total_mg"]
+    sugar_total = stats["sugar_total_g"]
+    scope_label = "近 7 天" if _is_weekly_report(report_type, stats) else "今天"
     insights = []
 
-    if sugar_total > 50:
+    if sugar_total > SUGAR_LIMIT_G:
+        over = sugar_total - SUGAR_LIMIT_G
+        top = stats["top_sugar_drinks"][0] if stats["top_sugar_drinks"] else {}
         insights.append({
             "level": "warning",
             "icon": "⚠️",
             "title": "糖分摄入已超过日建议量",
-            "message": f"今天已记录约 {sugar_total:.1f}g 糖分，高于 50g 的日建议限量。后续饮品建议优先选择无糖茶、无糖美式或白水。"
+            "message": (
+                f"{scope_label}记录糖分约 {sugar_total:.1f}g，比 {SUGAR_LIMIT_G:.0f}g 建议上限高 {over:.1f}g。"
+                f"主要贡献饮品包括 {top.get('name') or '当前记录中的高糖饮品'}。后续建议优先选择无糖茶、白水或无糖美式。"
+            ),
         })
-    elif sugar_total > 35:
+    elif sugar_total > SUGAR_LIMIT_G * 0.75:
         insights.append({
             "level": "info",
             "icon": "🍬",
-            "title": "糖分接近上限",
-            "message": f"今天糖分约 {sugar_total:.1f}g，已经接近日建议上限。后续可以尽量选择少糖或无糖。"
+            "title": "糖分接近建议上限",
+            "message": f"{scope_label}记录糖分约 {sugar_total:.1f}g，距离 {SUGAR_LIMIT_G:.0f}g 上限还剩 {SUGAR_LIMIT_G - sugar_total:.1f}g。",
         })
 
-    if caffeine_total > 400:
+    if caffeine_total > CAFFEINE_LIMIT_MG:
+        over = caffeine_total - CAFFEINE_LIMIT_MG
+        top = stats["top_caffeine_drinks"][0] if stats["top_caffeine_drinks"] else {}
         insights.append({
             "level": "warning",
             "icon": "☕",
             "title": "咖啡因摄入已超过日建议量",
-            "message": f"今天已记录约 {caffeine_total:.1f}mg 咖啡因，高于 400mg 的日建议限量。接下来建议避免继续摄入含咖啡因饮品。"
+            "message": (
+                f"{scope_label}记录咖啡因约 {caffeine_total:.1f}mg，比 {CAFFEINE_LIMIT_MG:.0f}mg 建议上限高 {over:.1f}mg。"
+                f"主要贡献饮品包括 {top.get('name') or '当前记录中的高咖啡因饮品'}。接下来建议避免继续摄入含咖啡因饮品。"
+            ),
         })
-    elif caffeine_total > 250:
+    elif caffeine_total > CAFFEINE_LIMIT_MG * 0.7:
         insights.append({
             "level": "info",
             "icon": "☕",
             "title": "咖啡因摄入需要留意",
-            "message": f"今天咖啡因约 {caffeine_total:.1f}mg，仍在 400mg 以内，但如果已经接近下午或晚上，后续建议选择低咖啡因饮品。"
+            "message": f"{scope_label}记录咖啡因约 {caffeine_total:.1f}mg，仍低于 {CAFFEINE_LIMIT_MG:.0f}mg 上限，但后续饮品可以选择低咖啡因或无咖啡因。",
+        })
+
+    if _is_weekly_report(report_type, stats) and stats["active_days"] > 0:
+        avg_sugar = sugar_total / stats["active_days"]
+        avg_caffeine = caffeine_total / stats["active_days"]
+        insights.append({
+            "level": "info",
+            "icon": "📊",
+            "title": "近 7 天摄入节奏",
+            "message": f"近 7 天有 {stats['active_days']} 天记录饮品，平均每天约 {avg_caffeine:.1f}mg 咖啡因、{avg_sugar:.1f}g 糖分。",
         })
 
     if not insights:
         insights.append({
             "level": "success",
             "icon": "✅",
-            "title": f"{report_type}饮品摄入整体平稳",
-            "message": f"当前记录约 {caffeine_total:.1f}mg 咖啡因、{sugar_total:.1f}g 糖分，仍在常用日建议范围内。"
+            "title": f"{scope_label}饮品摄入整体平稳",
+            "message": f"{scope_label}记录约 {caffeine_total:.1f}mg 咖啡因、{sugar_total:.1f}g 糖分，仍在常用建议范围内。",
         })
 
     return {"insights": insights[:3]}
+
+
+def _is_weekly_report(report_type: str, stats: dict) -> bool:
+    return report_type == "周度" or stats.get("active_days", 0) > 1
 
 
 def _normalize_report(report: dict, logs: list, report_type: str) -> dict:
@@ -175,21 +259,15 @@ def _normalize_report(report: dict, logs: list, report_type: str) -> dict:
         normalized.append(item)
 
     guarded = _generate_local_report(logs, report_type)["insights"]
-    high_risk_items = [
-        item for item in guarded
-        if item.get("level") in {"warning", "danger"}
-    ]
-    if high_risk_items:
-        existing_text = " ".join(
-            f"{item.get('title', '')} {item.get('message', '')}" for item in normalized
+    for guarded_item in reversed([item for item in guarded if item.get("level") in {"warning", "danger"}]):
+        keyword = "糖" if "糖" in guarded_item.get("title", "") else "咖啡因"
+        has_warning = any(
+            item.get("level") in {"warning", "danger"}
+            and keyword in f"{item.get('title', '')} {item.get('message', '')}"
+            for item in normalized
         )
-        for item in reversed(high_risk_items):
-            keyword = "糖" if "糖" in item.get("title", "") else "咖啡因"
-            if keyword not in existing_text or not any(
-                insight.get("level") in {"warning", "danger"} and keyword in f"{insight.get('title', '')} {insight.get('message', '')}"
-                for insight in normalized
-            ):
-                normalized.insert(0, item)
+        if not has_warning:
+            normalized.insert(0, guarded_item)
 
     if not normalized:
         normalized = guarded

@@ -642,10 +642,15 @@
           <div class="acquisition-lists">
             <div class="acquisition-review-panel">
               <div class="section-header-row compact-row">
-                <h4 class="subsection-title">审核队列</h4>
+                <label class="source-group-select-all">
+                  <input type="checkbox" id="select-all-source-groups">
+                  <span>全选组</span>
+                </label>
                 <div class="bulk-actions">
-                  <button type="button" id="bulk-approve-evidence-btn" class="btn btn-primary">批量入库</button>
-                  <button type="button" id="bulk-delete-evidence-btn" class="mini-danger-btn">批量删除证据</button>
+                  <button type="button" id="bulk-approve-source-groups-btn" class="btn btn-primary">入库选中组</button>
+                  <button type="button" id="bulk-delete-source-groups-btn" class="mini-danger-btn">删除选中组证据</button>
+                  <button type="button" id="bulk-approve-evidence-btn" class="mini-secondary-btn">入库选中证据</button>
+                  <button type="button" id="bulk-delete-evidence-btn" class="mini-danger-btn">删除选中证据</button>
                   <button type="button" id="bulk-delete-candidates-btn" class="mini-danger-btn">批量删除候选</button>
                 </div>
               </div>

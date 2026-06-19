@@ -99,6 +99,12 @@ export function initDatabasePanel(onDatabaseChanged) {
   document.getElementById('bulk-delete-evidence-btn')?.addEventListener('click', () => {
     handleBulkDeleteEvidence();
   });
+  document.getElementById('bulk-approve-source-groups-btn')?.addEventListener('click', () => {
+    handleBulkApproveSourceGroups();
+  });
+  document.getElementById('bulk-delete-source-groups-btn')?.addEventListener('click', () => {
+    handleBulkDeleteSourceGroups();
+  });
   document.getElementById('bulk-delete-candidates-btn')?.addEventListener('click', () => {
     handleBulkDeleteCandidates();
   });
@@ -410,6 +416,13 @@ async function renderKnowledgeAcquisitionPanel() {
     candidateList.querySelectorAll('.delete-candidate-btn').forEach(btn => {
       btn.addEventListener('click', () => handleDeleteCandidate(btn.dataset.candidateId));
     });
+    candidateList.querySelectorAll('.approve-evidence-group-btn').forEach(btn => {
+      btn.addEventListener('click', () => handleApproveEvidenceGroup(btn.dataset.evidenceIds));
+    });
+    candidateList.querySelectorAll('.delete-evidence-group-btn').forEach(btn => {
+      btn.addEventListener('click', () => handleDeleteEvidenceGroup(btn.dataset.evidenceIds));
+    });
+    bindSourceGroupSelection(candidateList);
   } catch (e) {
     candidateList.innerHTML = '<div class="acquisition-empty">无法连接后端采集接口</div>';
     evidenceList.innerHTML = '';
@@ -421,6 +434,7 @@ function renderReviewQueue(candidates, evidenceRows) {
     return '<div class="acquisition-empty">暂无待审核内容</div>';
   }
 
+  const sourceGroups = groupEvidenceBySource(evidenceRows);
   const evidenceByCandidate = new Map();
   evidenceRows.forEach(evidence => {
     const key = evidence.candidate_id || '';
@@ -428,8 +442,8 @@ function renderReviewQueue(candidates, evidenceRows) {
     evidenceByCandidate.get(key).push(evidence);
   });
 
-  const candidateCards = candidates.map(candidate => (
-    renderCandidateReviewItem(candidate, evidenceByCandidate.get(candidate.id) || [])
+  const sourceGroupCards = sourceGroups.map(group => (
+    renderSourceReviewGroup(group, candidates, evidenceByCandidate)
   ));
 
   const orphanEvidence = evidenceRows.filter(evidence => (
@@ -451,7 +465,118 @@ function renderReviewQueue(candidates, evidenceRows) {
     `
     : '';
 
-  return [...candidateCards, orphanBlock].join('');
+  const candidateIdsInSourceGroups = new Set(evidenceRows.map(evidence => evidence.candidate_id).filter(Boolean));
+  const candidateWithoutEvidence = candidates
+    .filter(candidate => !candidateIdsInSourceGroups.has(candidate.id))
+    .map(candidate => renderCandidateReviewItem(candidate, []));
+
+  return [...sourceGroupCards, ...candidateWithoutEvidence, orphanBlock].join('');
+}
+
+function groupEvidenceBySource(evidenceRows) {
+  const groups = new Map();
+  evidenceRows.forEach(evidence => {
+    if (!evidence.candidate_id) return;
+    const key = [
+      evidence.source_type || 'manual',
+      evidence.source_url || '',
+      evidence.raw_evidence || ''
+    ].join('|');
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        source_type: evidence.source_type || 'manual',
+        source_url: evidence.source_url || '',
+        evidence: []
+      });
+    }
+    groups.get(key).evidence.push(evidence);
+  });
+  return Array.from(groups.values());
+}
+
+function renderSourceReviewGroup(group, candidates, evidenceByCandidate) {
+  const evidenceIds = group.evidence.map(evidence => evidence.id);
+  const candidateIds = new Set(group.evidence.map(evidence => evidence.candidate_id).filter(Boolean));
+  const groupCandidates = candidates.filter(candidate => candidateIds.has(candidate.id));
+  const sourceLabel = formatSourceLabel(group);
+  return `
+    <div class="acquisition-source-group" data-source-group>
+      <div class="acquisition-source-head">
+        <input type="checkbox" class="source-group-select" value="${escapeAttr(evidenceIds.join(','))}" aria-label="选择来源组">
+        <div>
+          <div class="acquisition-title">${escapeHtml(sourceLabel)}</div>
+          <div class="acquisition-meta">${groupCandidates.length} 个候选 · ${evidenceIds.length} 条证据</div>
+        </div>
+        <div class="acquisition-actions">
+          <button type="button" class="btn btn-primary approve-evidence-group-btn" data-evidence-ids="${escapeAttr(evidenceIds.join(','))}">入库这一组</button>
+          <button type="button" class="mini-danger-btn delete-evidence-group-btn" data-evidence-ids="${escapeAttr(evidenceIds.join(','))}">删除这一组证据</button>
+        </div>
+      </div>
+      <div class="acquisition-source-body">
+        ${groupCandidates.map(candidate => renderCandidateReviewItem(candidate, evidenceByCandidate.get(candidate.id) || [])).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindSourceGroupSelection(container) {
+  const selectAll = document.getElementById('select-all-source-groups');
+  const groupInputs = Array.from(container.querySelectorAll('.source-group-select'));
+  const updateSelectAll = () => {
+    if (!selectAll) return;
+    const checkedCount = groupInputs.filter(input => input.checked).length;
+    selectAll.checked = groupInputs.length > 0 && checkedCount === groupInputs.length;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < groupInputs.length;
+  };
+
+  groupInputs.forEach(input => {
+    input.addEventListener('change', () => {
+      const group = input.closest('[data-source-group]');
+      setGroupChildrenChecked(group, input.checked);
+      input.indeterminate = false;
+      updateSelectAll();
+    });
+  });
+
+  container.querySelectorAll('.candidate-select, .evidence-select').forEach(input => {
+    input.addEventListener('change', () => {
+      const group = input.closest('[data-source-group]');
+      updateGroupSelectionState(group);
+      updateSelectAll();
+    });
+  });
+
+  if (selectAll) {
+    selectAll.onchange = () => {
+      groupInputs.forEach(input => {
+        input.checked = selectAll.checked;
+        input.indeterminate = false;
+        setGroupChildrenChecked(input.closest('[data-source-group]'), selectAll.checked);
+      });
+      selectAll.indeterminate = false;
+    };
+  }
+
+  groupInputs.forEach(input => updateGroupSelectionState(input.closest('[data-source-group]')));
+  updateSelectAll();
+}
+
+function setGroupChildrenChecked(group, checked) {
+  if (!group) return;
+  group.querySelectorAll('.candidate-select, .evidence-select').forEach(input => {
+    input.checked = checked;
+  });
+}
+
+function updateGroupSelectionState(group) {
+  if (!group) return;
+  const groupInput = group.querySelector('.source-group-select');
+  const childInputs = Array.from(group.querySelectorAll('.candidate-select, .evidence-select'));
+  if (!groupInput || !childInputs.length) return;
+  const checkedCount = childInputs.filter(input => input.checked).length;
+  groupInput.checked = checkedCount === childInputs.length;
+  groupInput.indeterminate = checkedCount > 0 && checkedCount < childInputs.length;
 }
 
 function renderCandidateReviewItem(candidate, evidenceRows = []) {
@@ -725,6 +850,39 @@ async function handleBulkApproveEvidence() {
   }
 }
 
+async function handleApproveEvidenceGroup(idsText) {
+  const ids = parseEvidenceIds(idsText);
+  if (!ids.length) return;
+  try {
+    const data = await approveKnowledgeEvidenceBulkApi(ids);
+    await loadDatabaseAsync();
+    const errorText = data.errors?.length ? `，${data.errors.length} 条失败` : '';
+    setAcquisitionResult(`这一组已入库 ${data.approved?.length || 0} 条证据${errorText}`, true);
+    renderDatabasePanel();
+    if (_onDatabaseChanged) _onDatabaseChanged();
+  } catch (e) {
+    setAcquisitionResult(`这一组入库失败：${e.message || '请确认后端已启动'}`, false);
+  }
+}
+
+async function handleBulkApproveSourceGroups() {
+  const ids = getSelectedSourceGroupEvidenceIds();
+  if (!ids.length) {
+    setAcquisitionResult('请选择至少一个来源组', false);
+    return;
+  }
+  try {
+    const data = await approveKnowledgeEvidenceBulkApi(ids);
+    await loadDatabaseAsync();
+    const errorText = data.errors?.length ? `，${data.errors.length} 条失败` : '';
+    setAcquisitionResult(`选中组已入库 ${data.approved?.length || 0} 条证据${errorText}`, true);
+    renderDatabasePanel();
+    if (_onDatabaseChanged) _onDatabaseChanged();
+  } catch (e) {
+    setAcquisitionResult(`选中组入库失败：${e.message || '请确认后端已启动'}`, false);
+  }
+}
+
 async function handleDeleteEvidence(evidenceId) {
   if (!evidenceId) return;
   try {
@@ -748,6 +906,33 @@ async function handleBulkDeleteEvidence() {
     renderKnowledgeAcquisitionPanel();
   } catch (e) {
     setAcquisitionResult(`批量删除证据失败：${e.message || '请确认后端已启动'}`, false);
+  }
+}
+
+async function handleDeleteEvidenceGroup(idsText) {
+  const ids = parseEvidenceIds(idsText);
+  if (!ids.length) return;
+  try {
+    const data = await deleteKnowledgeEvidenceBulkApi(ids);
+    setAcquisitionResult(`这一组已删除证据 ${data.deleted || 0} 条`, true);
+    renderKnowledgeAcquisitionPanel();
+  } catch (e) {
+    setAcquisitionResult(`这一组删除失败：${e.message || '请确认后端已启动'}`, false);
+  }
+}
+
+async function handleBulkDeleteSourceGroups() {
+  const ids = getSelectedSourceGroupEvidenceIds();
+  if (!ids.length) {
+    setAcquisitionResult('请选择至少一个来源组', false);
+    return;
+  }
+  try {
+    const data = await deleteKnowledgeEvidenceBulkApi(ids);
+    setAcquisitionResult(`选中组已删除证据 ${data.deleted || 0} 条`, true);
+    renderKnowledgeAcquisitionPanel();
+  } catch (e) {
+    setAcquisitionResult(`选中组删除失败：${e.message || '请确认后端已启动'}`, false);
   }
 }
 
@@ -817,6 +1002,18 @@ function escapeAttr(value) {
     .replaceAll('>', '&gt;');
 }
 
+function formatSourceLabel(group) {
+  const typeLabel = {
+    image_upload: '图片识别来源',
+    official: '官方来源',
+    nutrition_label: '营养表来源',
+    community_measurement: '实测来源',
+    user_feedback: '用户反馈来源',
+    manual: '手动证据来源'
+  }[group.source_type] || group.source_type || '证据来源';
+  return group.source_url ? `${typeLabel} · ${group.source_url}` : typeLabel;
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -830,5 +1027,19 @@ function getCheckedValues(selector) {
   return Array.from(document.querySelectorAll(selector))
     .filter(input => input.checked)
     .map(input => input.value)
+    .filter(Boolean);
+}
+
+function getSelectedSourceGroupEvidenceIds() {
+  const ids = Array.from(document.querySelectorAll('.source-group-select'))
+    .filter(input => input.checked)
+    .flatMap(input => parseEvidenceIds(input.value));
+  return Array.from(new Set(ids));
+}
+
+function parseEvidenceIds(idsText = '') {
+  return String(idsText)
+    .split(',')
+    .map(id => id.trim())
     .filter(Boolean);
 }

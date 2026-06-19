@@ -9,7 +9,10 @@ def serialize_drink_log(log: DrinkLog) -> dict:
 
 
 def get_daily_report(db, date: str) -> dict:
-    today_records_db = db.query(DrinkLog).filter(DrinkLog.date == date, DrinkLog.status == 'active').all()
+    today_records_db = db.query(DrinkLog).filter(
+        DrinkLog.date == date,
+        DrinkLog.status == "active",
+    ).all()
     logs = [serialize_drink_log(record) for record in today_records_db]
     return generate_health_report(logs, "日度")
 
@@ -22,7 +25,7 @@ def get_weekly_report(db, date: str) -> dict:
         records_db = db.query(DrinkLog).filter(
             DrinkLog.date >= start_str,
             DrinkLog.date <= date,
-            DrinkLog.status == 'active',
+            DrinkLog.status == "active",
         ).all()
         logs = [serialize_drink_log(record) for record in records_db]
         return generate_health_report(logs, "周度")
