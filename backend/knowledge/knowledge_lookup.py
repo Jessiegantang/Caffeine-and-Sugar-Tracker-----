@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from db.database import DrinkKnowledge
 from rules.local_estimator import estimate_nutrition
+from rules.composition_agent import estimate_composition_nutrition
 from agents.llm_config import llm, llm_enabled
 from knowledge.rag_store import vectorstore
 
@@ -28,6 +29,31 @@ BRAND_CANONICAL_KEYS = {
     "nayuki": "nayuki",
 }
 
+BRAND_CANONICAL_KEYS.update({
+    "瑞幸咖啡": "luckin",
+    "瑞幸": "luckin",
+    "库迪咖啡": "cotti",
+    "库迪": "cotti",
+    "星巴克": "starbucks",
+    "星巴克中国": "starbucks",
+    "喜茶": "heytea",
+    "奈雪": "nayuki",
+    "奈雪的茶": "nayuki",
+})
+
+
+BRAND_CANONICAL_KEYS.update({
+    "\u745e\u5e78\u5496\u5561": "luckin",
+    "\u745e\u5e78": "luckin",
+    "\u5e93\u8fea\u5496\u5561": "cotti",
+    "\u5e93\u8fea": "cotti",
+    "\u661f\u5df4\u514b": "starbucks",
+    "\u661f\u5df4\u514b\u4e2d\u56fd": "starbucks",
+    "\u559c\u8336": "heytea",
+    "\u5948\u96ea": "nayuki",
+    "\u5948\u96ea\u7684\u8336": "nayuki",
+})
+
 
 def _knowledge_scope(source: str | None) -> str:
     source = source or ""
@@ -45,6 +71,10 @@ def _knowledge_scope(source: str | None) -> str:
 def _normalize_match_name(name: str | None) -> str:
     normalized = re.sub(r"\s+", "", name or "").lower()
     for token in ["咖啡", "饮品", "冷饮", "热饮", "标准杯", "默认杯型"]:
+        normalized = normalized.replace(token, "")
+    for token in ["咖啡", "饮品", "冷饮", "热饮", "标准杯", "默认杯型"]:
+        normalized = normalized.replace(token, "")
+    for token in ["\u5496\u5561", "\u996e\u54c1", "\u51b7\u996e", "\u70ed\u996e", "\u6807\u51c6\u676f", "\u9ed8\u8ba4\u676f\u578b"]:
         normalized = normalized.replace(token, "")
     return normalized
 
@@ -105,6 +135,10 @@ def _sugar_from_knowledge(base_sugar: float, ratio: float, sugar_level: str, mul
 
 
 def _estimate_nutrition_with_fallback(brand: str, name: str, drink_type: str, volume: int, sugar_level: str) -> dict:
+    composition_est = _estimate_nutrition_with_composition(brand, name, drink_type, volume, sugar_level)
+    if composition_est:
+        return composition_est
+
     if not llm_enabled():
         local_est = estimate_nutrition(brand, name, drink_type, volume, sugar_level)
         return {
@@ -156,6 +190,28 @@ def _estimate_nutrition_with_fallback(brand: str, name: str, drink_type: str, vo
             "confidence": local_est["confidence"],
             "reasoning": "; ".join(local_est["reasoning"]),
         }
+
+
+def _estimate_nutrition_with_composition(brand: str, name: str, drink_type: str, volume: int, sugar_level: str) -> dict | None:
+    try:
+        result = estimate_composition_nutrition({
+            "brand": brand,
+            "name": name,
+            "type": drink_type,
+            "volume": volume,
+            "sugar": sugar_level,
+        })
+        return {
+            "caffeine": result["caffeine"],
+            "sugar": result["sugarContent"],
+            "source": "Composition Estimation Agent",
+            "method": "COMPOSITION",
+            "confidence": result.get("confidence", 0.7),
+            "reasoning": "; ".join(result.get("reasoning") or []),
+        }
+    except Exception as e:
+        print(f"[Hybrid Composition Estimation Error] {e}", flush=True)
+        return None
 
 
 def _apply_hybrid_knowledge_result(r: dict, *, known: dict, ratio: float, source_label: str, method_prefix: str,

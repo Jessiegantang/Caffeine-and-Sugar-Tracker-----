@@ -73,6 +73,48 @@ class NutritionPipelineTests(unittest.TestCase):
         self.assertTrue(result["explainability"]["components"])
         self.assertIsInstance(result["reasoning"], list)
 
+    def test_caffeine_only_knowledge_uses_composition_for_missing_sugar(self):
+        db = SessionLocal()
+        kb_id = "test_pipeline_caffeine_only_matcha"
+        try:
+            existing = db.query(DrinkKnowledge).filter(DrinkKnowledge.id == kb_id).first()
+            if existing:
+                db.delete(existing)
+                db.commit()
+
+            db.add(DrinkKnowledge(
+                id=kb_id,
+                brand="PipelineCaffeineOnlyBrand",
+                name="Pipeline Matcha Latte",
+                type="coffee",
+                volume=450,
+                caffeine=45,
+                baseSugar=0,
+                source="reviewed:image_upload:caffeine_only",
+                confidence=0.64,
+            ))
+            db.commit()
+
+            result = estimate_drink_nutrition({
+                "brand": "PipelineCaffeineOnlyBrand",
+                "name": "Pipeline Matcha Latte",
+                "type": "coffee",
+                "sugar": "none",
+                "volume": 500,
+                "data_source": "user_input",
+            }, db)
+
+            self.assertEqual(result["matched_knowledge_id"], kb_id)
+            self.assertEqual(result["caffeine"], 50.0)
+            self.assertGreater(result["sugarContent"], 0)
+            self.assertEqual(result["estimation_method"], "HYBRID_SQL_EXACT_MATCH_COMPOSITION")
+        finally:
+            row = db.query(DrinkKnowledge).filter(DrinkKnowledge.id == kb_id).first()
+            if row:
+                db.delete(row)
+                db.commit()
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

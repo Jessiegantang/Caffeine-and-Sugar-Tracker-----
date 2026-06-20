@@ -150,7 +150,7 @@ function renderDrinksTableToElement(drinks, container) {
     <tr>
       <td>${drink.brand || '-'}</td>
       <td>${drink.name}</td>
-      <td>${TYPE_DEFINITIONS[drink.type]?.label || drink.type}</td>
+      <td>${TYPE_DEFINITIONS[drink.type]?.label || formatCandidateType(drink.type)}</td>
       <td>${drink.caffeine}</td>
       <td>${drink.baseSugar}</td>
       <td>${drink.defaultVolume}</td>
@@ -209,6 +209,7 @@ function openEditModal(drinkId) {
   document.getElementById('edit-drink-id').value = drinkId;
   document.getElementById('edit-drink-brand').value = drink.brand || '';
   document.getElementById('edit-drink-name').value = drink.name || '';
+  document.getElementById('edit-drink-type').value = drink.type || 'coffee';
   document.getElementById('edit-drink-caffeine').value = drink.caffeine || 0;
   document.getElementById('edit-drink-sugar').value = drink.baseSugar || 0;
   document.getElementById('edit-drink-volume').value = drink.defaultVolume || 500;
@@ -221,16 +222,18 @@ function closeEditModal() {
   elements.editDrinkForm.reset();
 }
 
-function handleUpdateDrink() {
+async function handleUpdateDrink() {
   const drinkId = document.getElementById('edit-drink-id').value;
   const brand = document.getElementById('edit-drink-brand').value.trim();
   const name = document.getElementById('edit-drink-name').value.trim();
+  const type = document.getElementById('edit-drink-type').value;
   const caffeine = parseInt(document.getElementById('edit-drink-caffeine').value, 10);
   const baseSugar = parseFloat(document.getElementById('edit-drink-sugar').value);
   const defaultVolume = parseInt(document.getElementById('edit-drink-volume').value, 10);
 
   const errors = [];
   if (!name || name.length < 2) errors.push('饮品名称至少需要2个字符');
+  if (!TYPE_DEFINITIONS[type]) errors.push('请选择有效的饮品类型');
   if (isNaN(caffeine) || caffeine < 0 || caffeine > 500) errors.push('咖啡因含量必须是0-500之间的数值');
   if (isNaN(baseSugar) || baseSugar < 0 || baseSugar > 100) errors.push('糖分含量必须是0-100之间的数值');
   if (isNaN(defaultVolume) || defaultVolume < 10 || defaultVolume > 2000) errors.push('容量必须是10-2000ml之间的数值');
@@ -240,7 +243,7 @@ function handleUpdateDrink() {
     return;
   }
 
-  updateDrink(drinkId, { brand, name, caffeine, baseSugar, defaultVolume });
+  await updateDrink(drinkId, { type, brand, name, caffeine, baseSugar, defaultVolume });
 
   closeEditModal();
   renderDatabasePanel();
@@ -587,10 +590,10 @@ function renderCandidateReviewItem(candidate, evidenceRows = []) {
         <input type="checkbox" class="candidate-select" value="${candidate.id}" aria-label="选择候选">
         <div>
           <div class="acquisition-title">${escapeHtml(candidate.brand || '-')} ${escapeHtml(candidate.name)}</div>
-          <div class="acquisition-meta">${candidate.type || '-'} · ${candidate.status || '-'} · ${evidenceCountText} · 置信度 ${formatConfidence(candidate.confidence)}</div>
+          <div class="acquisition-meta">${formatCandidateType(candidate.type)} · ${formatReviewStatus(candidate.status)} · ${evidenceCountText} · 置信度 ${formatConfidence(candidate.confidence)}</div>
         </div>
         <div class="acquisition-actions">
-          <span class="mini-badge">${candidate.discovery_method || 'manual'}</span>
+          <span class="mini-badge">${formatDiscoveryMethod(candidate.discovery_method)}</span>
           <button type="button" class="mini-danger-btn delete-candidate-btn" data-candidate-id="${candidate.id}">删除候选</button>
         </div>
       </div>
@@ -609,7 +612,7 @@ function renderEvidenceItem(evidence) {
     <div class="acquisition-item acquisition-evidence-item">
       <input type="checkbox" class="evidence-select" value="${evidence.id}" aria-label="选择证据">
       <div>
-        <div class="acquisition-title">${evidence.source_type || 'manual'} · ${evidence.status || '-'}</div>
+        <div class="acquisition-title">${formatEvidenceSourceType(evidence.source_type)} · ${formatReviewStatus(evidence.status)}</div>
         <div class="acquisition-meta">
           ${extracted.volume || '-'}ml · 咖啡因 ${formatNutritionValue(extracted.caffeine, 'mg')} · 糖分 ${formatNutritionValue(extracted.sugar, 'g')} · ${formatNutritionScope(extracted)} · 置信度 ${formatConfidence(evidence.confidence)}
         </div>
@@ -1012,6 +1015,57 @@ function formatSourceLabel(group) {
     manual: '手动证据来源'
   }[group.source_type] || group.source_type || '证据来源';
   return group.source_url ? `${typeLabel} · ${group.source_url}` : typeLabel;
+}
+
+function formatCandidateType(type) {
+  const labels = {
+    coffee: '咖啡',
+    teacoffee: '茶咖',
+    tea: '原叶茶',
+    milktea: '奶茶',
+    milk_tea: '奶茶',
+    fruittea: '果茶',
+    fruit_tea: '果茶',
+    soda: '汽水',
+  };
+  return labels[type] || type || '-';
+}
+
+function formatReviewStatus(status) {
+  const labels = {
+    pending_review: '待审核',
+    evidence_ready: '证据待审核',
+    approved: '已入库',
+    rejected: '已拒绝',
+    deleted: '已删除',
+  };
+  return labels[status] || status || '-';
+}
+
+function formatDiscoveryMethod(method) {
+  const labels = {
+    manual: '手动创建',
+    image_upload: '图片识别',
+    official: '官方来源',
+    user_feedback: '用户反馈',
+    web_search: '网页搜索',
+  };
+  return labels[method] || method || '手动创建';
+}
+
+function formatEvidenceSourceType(sourceType) {
+  const labels = {
+    image_upload: '图片识别',
+    official_image: '官方图片',
+    nutrition_label_image: '营养表图片',
+    community_screenshot: '用户截图',
+    official: '官方',
+    nutrition_label: '营养表',
+    community_measurement: '实测',
+    user_feedback: '用户反馈',
+    manual: '手动',
+  };
+  return labels[sourceType] || sourceType || '手动';
 }
 
 function escapeHtml(value) {

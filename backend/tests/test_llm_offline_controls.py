@@ -121,7 +121,7 @@ class LLMOfflineControlTests(unittest.TestCase):
         self.assertEqual(result["missing_fields"], ["sugar"])
         self.assertEqual(result["follow_up"], "Which sugar level?")
 
-    def test_report_agent_returns_empty_report_without_llm_when_disabled(self):
+    def test_report_agent_returns_local_report_without_llm_when_disabled(self):
         logs = [{"name": "Offline Latte", "caffeine": 120, "sugarContent": 12}]
         with patch.dict(os.environ, {
             "ENABLE_LLM": "false",
@@ -129,7 +129,9 @@ class LLMOfflineControlTests(unittest.TestCase):
             "OPENAI_API_KEY": "real-looking-key",
         }):
             with patch.object(report_agent, "llm", RaisingLLM()):
-                self.assertEqual(report_agent.generate_health_report(logs, "daily"), {"insights": []})
+                result = report_agent.generate_health_report(logs, "daily")
+                self.assertIn("insights", result)
+                self.assertGreater(len(result["insights"]), 0)
 
     def test_companion_agent_returns_fallback_without_llm_when_disabled(self):
         with patch.dict(os.environ, {

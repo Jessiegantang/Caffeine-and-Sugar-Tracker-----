@@ -400,8 +400,8 @@ function renderNutritionTechnicalDetails(details) {
         <div class="nutrition-explain-section">
           <div class="nutrition-explain-title">估算方法</div>
           <div class="explain-chips">
-            <span class="explain-chip">方法: ${escapeHtml(result.estimation_method || explainability.method || '未知')}</span>
-            <span class="explain-chip">原始来源: ${escapeHtml(result.data_source || '未知')}</span>
+            <span class="explain-chip">方法: ${escapeHtml(translateNutritionText(result.estimation_method || explainability.method || '未知'))}</span>
+            <span class="explain-chip">原始来源: ${escapeHtml(translateNutritionText(result.data_source || '未知'))}</span>
           </div>
         </div>
 
@@ -465,16 +465,16 @@ function renderLangGraphWorkflow(graphTrace, verification) {
               <div class="agent-trace-card-head">
                 <div>
                   <strong>${escapeHtml(event.label)}</strong>
-                  <span>${escapeHtml(event.agent)}</span>
+                  <span>${escapeHtml(translateNutritionText(event.agent))}</span>
                 </div>
                 <div class="agent-trace-badges">
-                  <span>${escapeHtml(event.phase)}</span>
+                  <span>${escapeHtml(translateNutritionText(event.phase))}</span>
                   <span>${escapeHtml(formatTraceStatus(event.status))}</span>
                   ${event.confidence !== null && event.confidence !== undefined ? `<span>${formatConfidence(event.confidence)}</span>` : ''}
                 </div>
               </div>
-              ${event.summary ? `<p>${escapeHtml(event.summary)}</p>` : ''}
-              ${event.decision ? `<div class="agent-trace-decision">${escapeHtml(event.decision)}</div>` : ''}
+              ${event.summary ? `<p>${escapeHtml(translateNutritionText(event.summary))}</p>` : ''}
+              ${event.decision ? `<div class="agent-trace-decision">${escapeHtml(translateNutritionText(event.decision))}</div>` : ''}
               <div class="agent-trace-data-grid">
                 ${renderTraceDataList('输入', event.input)}
                 ${renderTraceDataList('输出', event.output)}
@@ -731,7 +731,7 @@ function renderFeedbackMetadata(feedback, notice = '') {
       ${notice ? `<div class="feedback-notice">${escapeHtml(notice)}</div>` : ''}
       ${feedback ? `
         <div class="explain-chips">
-          <span class="explain-chip">来源: ${escapeHtml(feedback.source_type || 'user_feedback')}</span>
+          <span class="explain-chip">来源: ${escapeHtml(translateNutritionText(feedback.source_type || 'user_feedback'))}</span>
           <span class="explain-chip">差异较大: ${feedback.high_delta ? '是' : '否'}</span>
         </div>
         ${feedback.source_note ? `<div class="nutrition-empty-note">${escapeHtml(feedback.source_note)}</div>` : ''}
@@ -930,11 +930,13 @@ function applyDrinkDataToForm(data) {
   elements.inputBaseSugarOverride.value = data.baseSugarOverride || '';
   
   // Set Radio for Drink Type
-  const typeRadio = elements.form.querySelector(`input[name="drink-type"][value="${data.type}"]`);
+  const normalizedType = normalizeDrinkTypeForForm(data.type);
+  const typeRadio = elements.form.querySelector(`input[name="drink-type"][value="${normalizedType}"]`);
   if (typeRadio) typeRadio.checked = true;
   
   // Set Radio for Sugar Level
-  const sugarRadio = elements.form.querySelector(`input[name="sugar-level"][value="${data.sugar}"]`);
+  const normalizedSugar = normalizeSugarForForm(data.sugar);
+  const sugarRadio = elements.form.querySelector(`input[name="sugar-level"][value="${normalizedSugar}"]`);
   if (sugarRadio) sugarRadio.checked = true;
 
   // Flash border to give visual cue
@@ -1186,6 +1188,51 @@ function renderDailyPanel() {
   fetchDailyAgentInsights(state.selectedDate);
 }
 
+function normalizeDrinkTypeForForm(type) {
+  const key = String(type || '').toLowerCase().replaceAll('-', '_').trim();
+  const map = {
+    coffee: 'coffee',
+    americano: 'coffee',
+    latte: 'coffee',
+    coconut_latte: 'coffee',
+    oat_latte: 'coffee',
+    mocha: 'coffee',
+    tea_coffee: 'coffee',
+    teacoffee: 'coffee',
+    tea: 'tea',
+    pure_tea: 'tea',
+    milk_tea: 'milktea',
+    milktea: 'milktea',
+    fruit_tea: 'fruittea',
+    fruittea: 'fruittea',
+    soda: 'soda',
+    packaged: 'soda',
+    energy_drink: 'soda',
+  };
+  return map[key] || 'coffee';
+}
+
+function normalizeSugarForForm(sugar) {
+  const key = String(sugar || '').toLowerCase().replaceAll('-', '_').trim();
+  const map = {
+    none: 'none',
+    no: 'none',
+    no_sugar: 'none',
+    zero: 'none',
+    zero_sugar: 'none',
+    unsweetened: 'none',
+    three: 'three',
+    less: 'three',
+    low: 'three',
+    half: 'half',
+    seven: 'seven',
+    full: 'full',
+    normal: 'full',
+    unknown: 'unknown',
+  };
+  return map[key] || 'unknown';
+}
+
 function formatConfidence(value) {
   const confidence = Number(value ?? 1);
   return `${Math.round(confidence * 100)}%`;
@@ -1203,7 +1250,7 @@ function translateExplainabilityLabel(label) {
 }
 
 function translateExplainabilityValue(value) {
-  const text = String(value ?? '');
+  const text = translateNutritionText(value);
   const values = {
     'Composition Estimation Agent': '\u6210\u5206\u4f30\u7b97 Agent',
     COMPOSITION_ESTIMATION: '\u6210\u5206\u62c6\u89e3\u4f30\u7b97',
@@ -1273,6 +1320,55 @@ function translateNutritionText(value) {
   if (!text) return '';
 
   const direct = {
+    coffee: '咖啡',
+    teacoffee: '茶咖',
+    tea: '原叶茶',
+    milktea: '奶茶',
+    milk_tea: '奶茶',
+    fruittea: '果茶',
+    fruit_tea: '果茶',
+    soda: '汽水',
+    knowledge: '知识库结果',
+    composition: '成分估算',
+    completed: '完成',
+    input: '输入',
+    output: '输出',
+    caffeine_only: '仅咖啡因',
+    sugar_only: '仅糖分',
+    caffeine_sugar: '咖啡因和糖分',
+    complete: '完整数据',
+    partial: '部分数据',
+    True: '是',
+    False: '否',
+    COMPOSITION: '成分估算',
+    LOCAL: '本地估算',
+    LLM: '模型估算',
+    user_feedback: '用户反馈',
+    image_upload: '图片识别',
+    official_image: '官方图片',
+    nutrition_label_image: '营养表图片',
+    community_screenshot: '用户截图',
+    manual: '手动',
+    pending_review: '待审核',
+    evidence_ready: '证据待审核',
+    approved: '已入库',
+    SQL_EXACT_MATCH: '知识库精确匹配',
+    HYBRID_SQL_EXACT_MATCH_LOCAL: '知识库部分匹配 + 本地估算',
+    HYBRID_SQL_EXACT_MATCH_LLM: '知识库部分匹配 + 模型估算',
+    HYBRID_SQL_EXACT_MATCH_COMPOSITION: '知识库部分匹配 + 成分估算',
+    LOCAL_ESTIMATOR: '本地兜底估算',
+    LOCAL_ESTIMATION: '本地动态估算',
+    LLM_ESTIMATION: '模型估算',
+    COMPOSITION_ESTIMATION: '成分拆解估算',
+    'Composition Estimation Agent': '成分估算 Agent',
+    'Local Estimator (Dynamic DB)': '本地动态估算',
+    'AI model estimate': '模型估算',
+    'reviewed:image_upload:caffeine_only': '已审核图片证据：仅咖啡因',
+    'reviewed:image_upload:sugar_only': '已审核图片证据：仅糖分',
+    'reviewed:image_upload:caffeine_sugar': '已审核图片证据：咖啡因和糖分',
+    'reviewed:official:caffeine_only': '已审核官方证据：仅咖啡因',
+    'reviewed:official:sugar_only': '已审核官方证据：仅糖分',
+    'reviewed:official:caffeine_sugar': '已审核官方证据：咖啡因和糖分',
     'Functional or energy-style naming detected; extra caffeine sources are not modeled without product evidence.':
       '检测到功能型或能量风格命名；在没有可信产品证据时，不额外估算其他咖啡因来源。',
     'Warning: Functional or energy-style naming detected; extra caffeine sources are not modeled without product evidence.':
@@ -1357,57 +1453,80 @@ function translateNutritionText(value) {
     'sugarContent exceeds 100g': '糖分超过 100g。'
   };
   if (direct[text]) return direct[text];
+  if (text.includes(' + ')) {
+    return text.split(' + ').map(part => translateNutritionText(part)).join(' + ');
+  }
   if (text.startsWith('Warning: ')) {
     const translated = translateNutritionText(text.slice(9));
     return translated === text.slice(9) ? `提醒：${text.slice(9)}` : `提醒：${translated}`;
   }
 
-  let match = text.match(/^([\d.]+)-([\d.]+)mg caffeine per espresso shot, best ([\d.]+)mg$/);
+  let match = text.match(/^SQL_EXACT_MATCH partial match scope=([^;]+); known fields: caffeine=(True|False), sugar=(True|False)\.$/);
+  if (match) {
+    return `知识库精确匹配为部分命中：范围为“${translateNutritionText(match[1])}”；已知字段：咖啡因=${translateNutritionText(match[2])}，糖分=${translateNutritionText(match[3])}。`;
+  }
+
+  match = text.match(/^RAG_MATCH partial match scope=([^;]+); known fields: caffeine=(True|False), sugar=(True|False)\.$/);
+  if (match) {
+    return `知识库语义匹配为部分命中：范围为“${translateNutritionText(match[1])}”；已知字段：咖啡因=${translateNutritionText(match[2])}，糖分=${translateNutritionText(match[3])}。`;
+  }
+
+  match = text.match(/^Estimated missing fields via ([A-Z_]+): (.+)$/);
+  if (match) {
+    const details = match[2]
+      .split(';')
+      .map(part => translateNutritionText(part.trim()))
+      .filter(Boolean)
+      .join('；');
+    return `缺失字段由${translateNutritionText(match[1])}补齐：${details}`;
+  }
+
+  match = text.match(/^([\d.]+)[-–]([\d.]+)mg caffeine per espresso shot, best ([\d.]+)mg$/);
   if (match) {
     return `每份浓缩咖啡按 ${match[1]}-${match[2]}mg 咖啡因估算，取 ${match[3]}mg。`;
   }
 
-  match = text.match(/^([\d.]+)-([\d.]+)g sugar per 100ml coconut water or coconut beverage base, best ([\d.]+)g$/);
+  match = text.match(/^([\d.]+)[-–]([\d.]+)g sugar per 100ml coconut water or coconut beverage base, best ([\d.]+)g$/);
   if (match) {
     return `椰子水或椰子饮品基底按每 100ml ${match[1]}-${match[2]}g 糖估算，取 ${match[3]}g。`;
   }
 
-  match = text.match(/^([\d.]+)-([\d.]+)g sugar per 100ml (.+), best ([\d.]+)g$/);
+  match = text.match(/^([\d.]+)[-–]([\d.]+)g sugar per 100ml (.+), best ([\d.]+)g$/);
   if (match) {
     return `${translateNutritionTerm(match[3])} 按每 100ml ${match[1]}-${match[2]}g 糖估算，取 ${match[4]}g。`;
   }
 
-  match = text.match(/^([\d.]+)-([\d.]+)mg caffeine per 100ml (.+), best ([\d.]+)mg$/);
+  match = text.match(/^([\d.]+)[-–]([\d.]+)mg caffeine per 100ml (.+), best ([\d.]+)mg$/);
   if (match) {
     return `${translateNutritionTerm(match[3])} 按每 100ml ${match[1]}-${match[2]}mg 咖啡因估算，取 ${match[4]}mg。`;
   }
 
-  match = text.match(/^Estimated espresso caffeine range from ([\d.]+) shot\(s\): ([\d.]+)-([\d.]+)mg, best ([\d.]+)mg\.$/);
+  match = text.match(/^Estimated espresso caffeine range from ([\d.]+) shot\(s\): ([\d.]+)[-–]([\d.]+)mg, best ([\d.]+)mg\.$/);
   if (match) {
     return `按 ${match[1]} 份浓缩咖啡估算咖啡因范围：${match[2]}-${match[3]}mg，取估算值 ${match[4]}mg。`;
   }
 
-  match = text.match(/^Included natural sugar range from fruit or beverage base: ([\d.]+)-([\d.]+)g\.$/);
+  match = text.match(/^Included natural sugar range from fruit or beverage base: ([\d.]+)[-–]([\d.]+)g\.$/);
   if (match) {
     return `已计入水果或饮品基底的天然糖范围：${match[1]}-${match[2]}g。`;
   }
 
-  match = text.match(/^Included natural sugar range from ([^:]+): ([\d.]+)-([\d.]+)g\.$/);
+  match = text.match(/^Included natural sugar range from ([^:]+): ([\d.]+)[-–]([\d.]+)g\.$/);
   if (match) {
     return `已计入 ${translateNutritionTerm(match[1])} 的天然糖范围：${match[2]}-${match[3]}g。`;
   }
 
-  match = text.match(/^Estimated tea caffeine range from tea base volume: ([\d.]+)-([\d.]+)mg\.$/);
+  match = text.match(/^Estimated tea caffeine range from tea base volume: ([\d.]+)[-–]([\d.]+)mg\.$/);
   if (match) {
     return `根据茶底用量估算咖啡因范围：${match[1]}-${match[2]}mg。`;
   }
 
-  match = text.match(/^Added sugar range adjusted by sweetness level '([^']+)': ([\d.]+)-([\d.]+)g\.$/);
+  match = text.match(/^Added sugar range adjusted by sweetness level '([^']+)': ([\d.]+)[-–]([\d.]+)g\.$/);
   if (match) {
     return `按甜度档位“${getSugarTextCN(match[1])}”估算额外加糖范围：${match[2]}-${match[3]}g。`;
   }
 
-  match = text.match(/^([\d.]+)-([\d.]+)g sugar per syrup pump adjusted by sweetness level ([^,]+), best ([\d.]+)g$/);
+  match = text.match(/^([\d.]+)[-–]([\d.]+)g sugar per syrup pump adjusted by sweetness level ([^,]+), best ([\d.]+)g$/);
   if (match) {
     return `每泵糖浆按 ${match[1]}-${match[2]}g 糖估算，并按甜度“${getSugarTextCN(match[3])}”调整，取 ${match[4]}g。`;
   }
@@ -1423,6 +1542,9 @@ function formatOptionalMeta(label, value) {
 
 function translateReasoning(reason) {
   const text = String(reason ?? '');
+  const translated = translateNutritionText(text);
+  if (translated !== text) return translated;
+
   let match = text.match(/^Estimated espresso caffeine range from ([\d.]+) shot\(s\): ([\d.]+)-([\d.]+)mg, best ([\d.]+)mg\.$/);
   if (match) {
     return `\u6309 ${match[1]} \u4efd\u6d53\u7f29\u5496\u5561\u4f30\u7b97\u5496\u5561\u56e0\u8303\u56f4\uff1a${match[2]}-${match[3]} mg\uff0c\u53d6\u4f30\u7b97\u503c ${match[4]} mg\u3002`;

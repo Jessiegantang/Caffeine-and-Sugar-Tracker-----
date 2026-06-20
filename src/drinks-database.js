@@ -62,9 +62,9 @@ export function getDatabase() {
 
 export function getDrinkById(drinkId) {
   if (!database) return null;
-  for (const category of Object.values(database)) {
+  for (const [type, category] of Object.entries(database)) {
     const drink = category.items.find(item => item.id === drinkId);
-    if (drink) return drink;
+    if (drink) return { ...drink, type };
   }
   return null;
 }
@@ -130,21 +130,42 @@ export async function addDrink(type, drinkData) {
 
 export async function updateDrink(drinkId, drinkData) {
   let foundType = null;
+  let foundDrink = null;
+  let foundIndex = -1;
   for (const [type, category] of Object.entries(database)) {
-    const drink = category.items.find(item => item.id === drinkId);
-    if (drink) {
-      Object.assign(drink, drinkData);
+    const index = category.items.findIndex(item => item.id === drinkId);
+    if (index !== -1) {
+      foundDrink = category.items[index];
+      foundIndex = index;
       foundType = type;
       break;
     }
   }
 
-  if (foundType) {
+  if (foundType && foundDrink) {
+    const nextType = drinkData.type || foundType;
+    const updatedDrink = {
+      ...foundDrink,
+      brand: drinkData.brand || '',
+      name: drinkData.name || '',
+      caffeine: drinkData.caffeine || 0,
+      baseSugar: drinkData.baseSugar || 0,
+      defaultVolume: drinkData.defaultVolume || 500,
+    };
+
+    if (nextType !== foundType) {
+      database[foundType].items.splice(foundIndex, 1);
+      if (!database[nextType]) database[nextType] = { category: '其他', items: [] };
+      database[nextType].items.push(updatedDrink);
+    } else {
+      Object.assign(foundDrink, updatedDrink);
+    }
+
     const payload = {
       id: drinkId,
       brand: drinkData.brand || '',
       name: drinkData.name || '',
-      type: foundType,
+      type: nextType,
       volume: drinkData.defaultVolume || 500,
       caffeine: drinkData.caffeine || 0,
       baseSugar: drinkData.baseSugar || 0,

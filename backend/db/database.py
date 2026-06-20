@@ -87,6 +87,17 @@ class AgentTrace(Base):
     final_action = Column(String, nullable=True)
     error = Column(String, nullable=True)
 
+class ReportCache(Base):
+    __tablename__ = 'report_cache'
+
+    id = Column(String, primary_key=True, index=True)
+    report_type = Column(String, index=True)
+    date = Column(String, index=True)
+    logs_signature = Column(String, index=True)
+    result_json = Column(String)
+    created_at = Column(String, default=lambda: datetime.datetime.now().isoformat(), index=True)
+    updated_at = Column(String, default=lambda: datetime.datetime.now().isoformat())
+
 class ProductCandidate(Base):
     __tablename__ = 'product_candidates'
 
