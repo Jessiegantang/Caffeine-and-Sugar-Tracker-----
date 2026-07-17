@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
-from api.schemas import BulkIdsInput, CandidateInput, EvidenceInput, ImageImportInput, KnowledgeInput
+from api.schemas import BulkIdsInput, CandidateInput, EvidenceInput, ImageImportInput, KnowledgeInput, TextAnalyzeInput
 from db.database import get_db
 from services import knowledge_acquisition_service, knowledge_service
 
@@ -42,15 +42,20 @@ def create_product_candidate(input_data: CandidateInput, db: Session = Depends(g
 
 
 @router.post("/api/knowledge/acquisition/image/analyze")
-async def analyze_acquisition_image(file: UploadFile = File(...)):
+async def analyze_acquisition_image(file: UploadFile = File(...), context_text: str = Form("")):
     content_type = file.content_type or ""
     image_bytes = await file.read()
-    return knowledge_acquisition_service.analyze_acquisition_image(image_bytes, content_type, file.filename)
+    return knowledge_acquisition_service.analyze_acquisition_image(image_bytes, content_type, file.filename, context_text)
 
 
 @router.post("/api/knowledge/acquisition/image/import")
 def import_acquisition_image_items(input_data: ImageImportInput, db: Session = Depends(get_db)):
     return knowledge_acquisition_service.import_acquisition_image_items(db, input_data)
+
+
+@router.post("/api/knowledge/acquisition/text/analyze")
+def analyze_acquisition_text(input_data: TextAnalyzeInput):
+    return knowledge_acquisition_service.analyze_acquisition_text(input_data)
 
 
 @router.get("/api/knowledge/acquisition/evidence")

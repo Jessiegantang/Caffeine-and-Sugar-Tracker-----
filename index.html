@@ -194,6 +194,10 @@
                       <input type="radio" name="drink-type" value="soda">
                       <span class="chip-label">🥤 汽水</span>
                     </label>
+                    <label class="radio-chip">
+                      <input type="radio" name="drink-type" value="other">
+                      <span class="chip-label">其他</span>
+                    </label>
                   </div>
                 </div>
 
@@ -568,6 +572,20 @@
               </div>
               <button type="button" id="analyze-image-btn" class="btn btn-primary">识别图片</button>
             </div>
+            <div class="acquisition-paste-panel" id="acquisition-paste-panel">
+              <div class="acquisition-paste-header">
+                <div>
+                  <h4>粘贴导入</h4>
+                  <p>在这里直接粘贴截图或文字。图片会进入上方图片识别；文字会尝试生成可加入审核的候选数据。</p>
+                </div>
+                <button type="button" id="clear-acquisition-paste-btn" class="btn acquisition-paste-clear">清空</button>
+              </div>
+              <textarea id="acquisition-paste-text" rows="4" placeholder="例如：瑞幸咖啡 生椰拿铁 500ml 咖啡因 120mg 糖分 18g。也可以点击这里后 Ctrl+V 粘贴截图。"></textarea>
+              <div class="acquisition-paste-actions">
+                <button type="button" id="parse-acquisition-paste-btn" class="btn btn-primary">从文字生成审核项</button>
+                <span id="acquisition-paste-status" class="acquisition-paste-status">支持 Ctrl+V 粘贴图片或文字。</span>
+              </div>
+            </div>
             <div class="image-preview-grid">
               <div id="acquisition-image-preview" class="image-preview-empty">暂无图片</div>
               <div>
@@ -601,6 +619,7 @@
                     <option value="milktea">奶茶</option>
                     <option value="fruittea">果茶</option>
                     <option value="soda">汽水</option>
+                    <option value="other">其他</option>
                   </select>
                 </div>
                 <div class="form-group flex-2">
@@ -689,7 +708,7 @@
                     <tr>
                       <td>类型</td>
                       <td>是</td>
-                      <td>coffee/teacoffee/tea/milktea/fruittea/soda</td>
+                      <td>coffee/teacoffee/tea/milktea/fruittea/soda/other</td>
                       <td>coffee</td>
                     </tr>
                     <tr>
@@ -792,6 +811,10 @@
                   <input type="radio" name="new-drink-type" value="soda">
                   <span class="chip-label">🥤 汽水</span>
                 </label>
+                <label class="radio-chip">
+                  <input type="radio" name="new-drink-type" value="other">
+                  <span class="chip-label">其他</span>
+                </label>
               </div>
             </div>
             <div class="form-row">
@@ -820,7 +843,16 @@
 
         <!-- Database Table -->
         <section class="database-table-section card glass">
-          <h3 class="card-title">数据库列表</h3>
+          <div class="database-table-header">
+            <div>
+              <h3 class="card-title">数据库列表</h3>
+              <div class="database-search-count" id="database-search-count">显示全部饮品</div>
+            </div>
+            <div class="database-search-box">
+              <input type="search" id="database-search-input" placeholder="搜索品牌、饮品、类型或数值">
+              <button type="button" id="database-search-clear" class="database-search-clear" aria-label="清空搜索">清空</button>
+            </div>
+          </div>
           <div class="table-container">
             <table id="drinks-table" class="drinks-table">
               <thead>
@@ -875,6 +907,7 @@
                     <option value="milktea">奶茶</option>
                     <option value="fruittea">果茶</option>
                     <option value="soda">汽水</option>
+                    <option value="other">其他</option>
                   </select>
                 </div>
                 <div class="form-group flex-1">

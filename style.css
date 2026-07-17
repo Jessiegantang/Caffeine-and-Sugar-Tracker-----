@@ -1607,6 +1607,59 @@ header {
 }
 
 /* Database Table */
+.database-table-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.database-search-count {
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.database-search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: min(420px, 100%);
+}
+
+.database-search-box input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0.45rem 0.65rem;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.database-search-box input:focus {
+  outline: none;
+  border-color: var(--caffeine-primary);
+  box-shadow: 0 0 0 3px var(--caffeine-glow);
+}
+
+.database-search-clear {
+  min-height: 38px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.database-search-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .table-container {
   overflow-x: auto;
   border-radius: 0.75rem;
@@ -1634,6 +1687,12 @@ header {
 
 .drinks-table tr:hover {
   background: rgba(212, 165, 116, 0.05);
+}
+
+.drinks-table-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
 }
 
 .table-edit-btn {
@@ -1793,6 +1852,12 @@ header {
   .image-preview-grid {
     grid-template-columns: 1fr;
   }
+
+  .acquisition-paste-header,
+  .acquisition-paste-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
   
   .stats-grid {
     grid-template-columns: 1fr;
@@ -1858,6 +1923,97 @@ header {
   grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto;
   gap: 1rem;
   align-items: end;
+}
+
+.acquisition-paste-panel {
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 0.5rem;
+  background: #f9fbfa;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.acquisition-paste-panel.drag-over {
+  border-color: var(--caffeine-primary);
+  box-shadow: 0 0 0 3px var(--caffeine-glow);
+}
+
+.acquisition-paste-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.acquisition-paste-header h4 {
+  margin: 0 0 0.25rem;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.acquisition-paste-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.acquisition-paste-clear {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 0.45rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.acquisition-paste-panel textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: #fff;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.acquisition-paste-panel textarea:focus {
+  outline: none;
+  border-color: var(--caffeine-primary);
+  box-shadow: 0 0 0 3px var(--caffeine-glow);
+}
+
+.acquisition-paste-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.acquisition-paste-actions .btn {
+  flex-shrink: 0;
+}
+
+.acquisition-paste-status {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.acquisition-paste-status.success {
+  color: var(--color-success);
+}
+
+.acquisition-paste-status.error {
+  color: var(--color-danger);
+}
+
+.acquisition-paste-status.info {
+  color: var(--caffeine-primary);
 }
 
 .image-preview-grid {
@@ -1933,6 +2089,15 @@ header {
   border-radius: 0.4rem;
   color: var(--text-primary);
   font: inherit;
+}
+
+.image-item-note {
+  margin-top: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  max-width: 220px;
+  white-space: normal;
 }
 
 .acquisition-grid {
@@ -2869,6 +3034,12 @@ body {
   .weekly-aggregates-grid,
   .db-stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .database-table-header,
+  .database-search-box {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .agent-trace-data-grid {

@@ -9,6 +9,7 @@ export const TYPE_DEFINITIONS = {
   milktea: { label: '🧋 奶茶', description: '茶与牛奶/奶精混合饮品。通常含有较多糖分。' },
   fruittea: { label: '🍋 果茶', description: '水果与茶混合饮品。含有水果本身的糖分。' },
   soda: { label: '🥤 汽水', description: '碳酸饮料。通常含有大量添加糖。' },
+  other: { label: '其他', description: '无法明确归入咖啡、茶、奶茶、果茶或汽水的饮品。类型不参与营养推断。' },
 };
 
 // Map backend DB structure to frontend Category structure
@@ -20,6 +21,7 @@ function convertListToDict(dbLogs) {
     milktea: { category: '奶茶', items: [] },
     fruittea: { category: '果茶', items: [] },
     soda: { category: '汽水', items: [] },
+    other: { category: '其他', items: [] },
   };
   
   for (const log of dbLogs) {

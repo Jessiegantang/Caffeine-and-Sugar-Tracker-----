@@ -28,12 +28,16 @@ BRAND_ALIASES = {
 }
 
 TYPE_KEYWORDS = {
-    "coffee": ["咖啡", "拿铁", "美式", "摩卡", "espresso", "latte", "americano", "coffee"],
-    "milktea": ["奶茶", "厚乳", "奶盖", "milk tea"],
-    "fruittea": ["果茶", "柠檬茶", "葡萄", "桃", "芒果", "fruit tea"],
-    "tea": ["绿茶", "红茶", "乌龙", "茶"],
+    "coffee": ["咖啡", "拿铁", "美式", "摩卡", "澳白", "冷萃", "dirty", "espresso", "latte", "americano", "coffee"],
+    "teacoffee": ["茶咖", "咖茶"],
+    "milktea": ["奶茶", "奶盖", "珍珠", "波波", "milk tea"],
+    "fruittea": ["果茶", "柠檬茶", "葡萄", "桃", "芒果", "柚", "椰", "椰椰", "果汁", "fruit tea"],
+    "tea": ["绿茶", "红茶", "乌龙", "茉莉", "茶"],
     "soda": ["气泡", "汽水", "soda"],
+    "other": ["冰沙", "沙冰", "库可冰", "可可", "巧克力", "雪冰", "冰"],
 }
+
+VALID_TYPES = set(TYPE_KEYWORDS)
 
 
 def create_manual_candidate(db, payload: dict) -> ProductCandidate:
@@ -129,7 +133,12 @@ def approve_evidence_to_knowledge(db, evidence_id: str) -> DrinkKnowledge:
     return kb
 
 
-def analyze_image_with_vision(image_bytes: bytes, content_type: str, filename: str | None = None) -> dict:
+def analyze_image_with_vision(
+    image_bytes: bytes,
+    content_type: str,
+    filename: str | None = None,
+    context_text: str = "",
+) -> dict:
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key or api_key.startswith("dummy_"):
         return {
@@ -157,7 +166,12 @@ def analyze_image_with_vision(image_bytes: bytes, content_type: str, filename: s
                 "The image may contain one product or many products. Return strict JSON only. "
                 "Do not invent missing values. Use null for unknown volume, caffeine, or sugar. "
                 "For each item include: brand, name, type, volume, caffeine, sugar, volume_note, raw_evidence, confidence. "
-                "type must be one of coffee, teacoffee, tea, milktea, fruittea, soda. "
+                "type must be one of coffee, teacoffee, tea, milktea, fruittea, soda, other. "
+                "Classify latte-style products such as 米乳拿铁, 生椰拿铁, 厚乳拿铁, 生酪拿铁 as coffee unless the name explicitly says 茶咖. "
+                "Classify coconut or fruit flavored non-coffee ice drinks such as 海岛椰椰库可冰 and 柚见茉莉库可冰 as fruittea. "
+                "Use other for ambiguous dessert/smoothie drinks such as 巧克力库可冰 when they are not coffee, tea, milk tea, fruit tea, or soda. "
+                "Use user context when it states shared brand, default volume, serving basis, or notes. "
+                "If a numeric field is shown as a range, return the range text instead of dropping it. "
                 "If the image is a caffeine table, return one item per visible row. "
                 "Important layout rule: many Chinese beverage tables have two independent product/value column groups, "
                 "for example left name+mg and right name+mg. Scan all columns from top to bottom, left group and right group, "
@@ -170,7 +184,8 @@ def analyze_image_with_vision(image_bytes: bytes, content_type: str, filename: s
                         "Analyze this image and return JSON in this exact shape: "
                         "{\"source_type\":\"image_upload\",\"evidence_type\":\"caffeine_table|nutrition_label|menu|mixed\","
                         "\"brand\":string|null,\"items\":[...]}. "
-                        "For caffeine tables, every row that looks like 产品名 + 数字mg is one item, including the right-side column."
+                        "For caffeine tables, every row that looks like 产品名 + 数字mg is one item, including the right-side column. "
+                        f"User context: {context_text[:2000] if context_text else 'none'}"
                     ),
                 },
                 {
@@ -180,7 +195,7 @@ def analyze_image_with_vision(image_bytes: bytes, content_type: str, filename: s
             ]),
         ])
         parsed = _parse_json_object(response.content)
-        items = normalize_image_items(parsed.get("items", []), parsed.get("brand"))
+        items = normalize_image_items(parsed.get("items", []), parsed.get("brand"), context_text)
         return {
             "vision_configured": True,
             "filename": filename,
@@ -197,25 +212,55 @@ def analyze_image_with_vision(image_bytes: bytes, content_type: str, filename: s
         }
 
 
-def normalize_image_items(items: list[dict], default_brand: str | None = None) -> list[dict]:
+def normalize_image_items(
+    items: list[dict],
+    default_brand: str | None = None,
+    context_text: str = "",
+) -> list[dict]:
     normalized = []
+    context_brand = normalize_brand(default_brand or infer_brand(context_text))
+    context_volume = _extract_context_volume(context_text)
+    context_note = _extract_context_note(context_text)
     for item in items:
         name = (item.get("name") or "").strip()
         if not name:
             continue
-        brand = normalize_brand(item.get("brand") or default_brand or infer_brand(name))
+        brand = normalize_brand(item.get("brand") or context_brand or infer_brand(name))
+        volume, volume_range = _coerce_numeric_value(item.get("volume"), "volume")
+        caffeine, caffeine_range = _coerce_numeric_value(item.get("caffeine"), "caffeine")
+        sugar, sugar_range = _coerce_numeric_value(item.get("sugar"), "sugar")
+        notes = []
+        if volume is None and context_volume is not None:
+            volume = context_volume
+            notes.append(f"容量来自上下文 {context_volume:g}ml")
+        if caffeine_range:
+            notes.append(f"咖啡因取范围中值 {caffeine:g}mg")
+        if sugar_range:
+            notes.append(f"糖分取范围中值 {sugar:g}g")
+        caffeine_qualifier_note = _numeric_qualifier_note(item.get("caffeine"), caffeine, "咖啡因", "mg")
+        sugar_qualifier_note = _numeric_qualifier_note(item.get("sugar"), sugar, "糖分", "g")
+        if caffeine_qualifier_note:
+            notes.append(caffeine_qualifier_note)
+        if sugar_qualifier_note:
+            notes.append(sugar_qualifier_note)
+        if brand and not item.get("brand") and context_brand:
+            notes.append(f"品牌来自上下文 {brand}")
         extracted = {
-            "volume": _safe_float(item.get("volume")),
-            "caffeine": _safe_float(item.get("caffeine")),
-            "sugar": _safe_float(item.get("sugar")),
+            "volume": volume,
+            "caffeine": caffeine,
+            "sugar": sugar,
         }
         normalized.append({
             "brand": brand,
             "name": name,
-            "type": item.get("type") or infer_type(name),
+            "type": normalize_type(item.get("type"), name, item.get("raw_evidence")),
             **extracted,
             "nutrition_scope": nutrition_scope(extracted),
-            "volume_note": item.get("volume_note"),
+            "volume_note": item.get("volume_note") or context_note,
+            "volume_range": volume_range,
+            "caffeine_range": caffeine_range,
+            "sugar_range": sugar_range,
+            "normalization_notes": notes,
             "raw_evidence": item.get("raw_evidence") or _format_raw_evidence(item),
             "confidence": round(max(0.1, min(float(item.get("confidence") or 0.65), 0.95)), 2),
         })
@@ -255,8 +300,18 @@ def stage_image_items(db, items: list[dict], source_type: str = "image_upload") 
 
 
 def parse_candidate_from_text(text: str) -> dict:
-    brand = infer_brand(text)
+    brand = infer_brand(text) or _extract_explicit_brand(text)
+    explicit_name = _extract_explicit_name(text)
+    if explicit_name:
+        explicit_name = re.split(r"\s+(?:容量|咖啡因|糖分|糖|caffeine|sugar)", explicit_name, flags=re.I)[0].strip()
+        return {
+            "brand": normalize_brand(brand),
+            "name": explicit_name,
+            "type": infer_type(explicit_name or text),
+        }
     cleaned = text
+    if brand:
+        cleaned = cleaned.replace(brand, "")
     for alias in BRAND_ALIASES:
         cleaned = re.sub(re.escape(alias), "", cleaned, flags=re.IGNORECASE)
     name_match = re.search(r"([\u4e00-\u9fa5A-Za-z0-9]+(?:拿铁|美式|奶茶|果茶|柠檬茶|咖啡|茶|气泡水))", cleaned)
@@ -268,12 +323,34 @@ def parse_candidate_from_text(text: str) -> dict:
     }
 
 
+def _extract_explicit_brand(text: str) -> str:
+    match = re.search(r"(?:品牌|brand)\s*:?\s*([^,，;；\n\s]+)", text, flags=re.I)
+    return match.group(1).strip() if match else ""
+
+
+def _extract_explicit_name(text: str) -> str:
+    match = re.search(r"(?:饮品名称|产品名称|候选饮品|名称|name)\s*:?\s*([^,，;；\n]+)", text, flags=re.I)
+    return match.group(1).strip() if match else ""
+
+
 def extract_nutrition_fields(raw_text: str) -> dict:
     text = raw_text.replace("：", ":")
     return {
         "volume": _extract_number(text, [r"(\d+(?:\.\d+)?)\s*ml", r"容量\s*:?\s*(\d+(?:\.\d+)?)"]),
-        "caffeine": _extract_number(text, [r"咖啡因\s*:?\s*(\d+(?:\.\d+)?)\s*mg", r"caffeine\s*:?\s*(\d+(?:\.\d+)?)\s*mg"]),
-        "sugar": _extract_number(text, [r"糖分\s*:?\s*(\d+(?:\.\d+)?)\s*g", r"糖\s*:?\s*(\d+(?:\.\d+)?)\s*g", r"sugar\s*:?\s*(\d+(?:\.\d+)?)\s*g"]),
+        "caffeine": _extract_number(text, [
+            r"咖啡因\s*:?\s*[<≤]\s*(\d+(?:\.\d+)?)\s*mg",
+            r"咖啡因\s*:?\s*(\d+(?:\.\d+)?)\s*(?:\+|以上|及以上)?\s*mg",
+            r"caffeine\s*:?\s*[<≤]\s*(\d+(?:\.\d+)?)\s*mg",
+            r"caffeine\s*:?\s*(\d+(?:\.\d+)?)\s*(?:\+|above|or more)?\s*mg",
+        ]),
+        "sugar": _extract_number(text, [
+            r"糖分\s*:?\s*[<≤]\s*(\d+(?:\.\d+)?)\s*g",
+            r"糖分\s*:?\s*(\d+(?:\.\d+)?)\s*(?:\+|以上|及以上)?\s*g",
+            r"糖\s*:?\s*[<≤]\s*(\d+(?:\.\d+)?)\s*g",
+            r"糖\s*:?\s*(\d+(?:\.\d+)?)\s*(?:\+|以上|及以上)?\s*g",
+            r"sugar\s*:?\s*[<≤]\s*(\d+(?:\.\d+)?)\s*g",
+            r"sugar\s*:?\s*(\d+(?:\.\d+)?)\s*(?:\+|above|or more)?\s*g",
+        ]),
     }
 
 
@@ -281,10 +358,20 @@ def item_to_evidence_text(item: dict) -> str:
     parts = [item.get("raw_evidence") or item.get("name") or ""]
     if item.get("volume") is not None:
         parts.append(f"容量: {item.get('volume')}ml")
+    if item.get("volume_range"):
+        parts.append(f"容量原范围: {_range_to_text(item.get('volume_range'))}ml")
     if item.get("caffeine") is not None:
         parts.append(f"咖啡因: {item.get('caffeine')}mg")
+    if item.get("caffeine_range"):
+        parts.append(f"咖啡因原范围: {_range_to_text(item.get('caffeine_range'))}mg")
     if item.get("sugar") is not None:
         parts.append(f"糖分: {item.get('sugar')}g")
+    if item.get("sugar_range"):
+        parts.append(f"糖分原范围: {_range_to_text(item.get('sugar_range'))}g")
+    if item.get("volume_note"):
+        parts.append(f"口径: {item.get('volume_note')}")
+    for note in item.get("normalization_notes") or []:
+        parts.append(str(note))
     return " ".join(str(part) for part in parts if part)
 
 
@@ -402,10 +489,47 @@ def normalize_brand(brand: str | None) -> str | None:
 
 def infer_type(text: str) -> str:
     lower = (text or "").lower()
+    if not lower:
+        return "other"
+
+    if any(keyword in lower or keyword in text for keyword in ["气泡", "汽水", "soda"]):
+        return "soda"
+    if any(keyword in lower or keyword in text for keyword in ["茶咖", "咖茶"]):
+        return "teacoffee"
+    if any(keyword in lower or keyword in text for keyword in ["咖啡", "拿铁", "美式", "摩卡", "澳白", "冷萃", "dirty", "espresso", "latte", "americano", "coffee"]):
+        return "coffee"
+    if any(keyword in lower or keyword in text for keyword in ["奶茶", "奶盖", "珍珠", "波波", "milk tea"]):
+        return "milktea"
+    if any(keyword in lower or keyword in text for keyword in ["果茶", "柠檬茶", "葡萄", "桃", "芒果", "柚", "椰", "椰椰", "果汁", "fruit tea"]):
+        return "fruittea"
+    if any(keyword in lower or keyword in text for keyword in ["绿茶", "红茶", "乌龙", "茉莉", "抹茶", "茶"]):
+        return "tea"
+    if any(keyword in lower or keyword in text for keyword in ["冰沙", "沙冰", "库可冰", "可可", "巧克力", "雪冰", "冰"]):
+        return "other"
     for drink_type, keywords in TYPE_KEYWORDS.items():
         if any(keyword.lower() in lower or keyword in text for keyword in keywords):
             return drink_type
-    return "coffee"
+    return "other"
+
+
+def normalize_type(candidate_type: str | None, name: str = "", raw_text: str | None = None) -> str:
+    inferred = infer_type(" ".join(part for part in [name, raw_text or ""] if part))
+    if candidate_type not in VALID_TYPES:
+        return inferred
+    if inferred == "coffee" and _looks_like_coffee_name(name):
+        return "coffee"
+    if inferred in {"teacoffee", "tea", "milktea", "fruittea", "soda", "other"}:
+        return inferred
+    return candidate_type or inferred
+
+
+def _looks_like_coffee_name(name: str) -> bool:
+    text = name or ""
+    if any(keyword in text for keyword in ["茶咖", "咖茶"]):
+        return False
+    return any(keyword in text.lower() or keyword in text for keyword in [
+        "咖啡", "拿铁", "美式", "摩卡", "澳白", "冷萃", "dirty", "latte", "americano", "espresso"
+    ])
 
 
 def serialize_candidate(candidate: ProductCandidate) -> dict:
@@ -430,6 +554,89 @@ def _parse_json_object(content: str) -> dict:
     if match:
         text = match.group(0)
     return json.loads(text)
+
+
+def _extract_context_volume(context_text: str) -> float | None:
+    text = context_text or ""
+    match = re.search(r"(?:约|大杯|中杯|小杯|每杯|容量)?\s*(\d+(?:\.\d+)?)\s*ml", text, flags=re.I)
+    return float(match.group(1)) if match else None
+
+
+def _extract_context_note(context_text: str) -> str | None:
+    text = (context_text or "").strip()
+    if not text:
+        return None
+    notes = []
+    volume = _extract_context_volume(text)
+    if volume is not None:
+        notes.append(f"上下文口径约 {volume:g}ml")
+    if "不额外加糖" in text or "不加糖" in text:
+        notes.append("不额外加糖口径")
+    if "估算" in text:
+        notes.append("文本/图片估算值")
+    return "；".join(notes) if notes else None
+
+
+def _coerce_numeric_value(value, field: str) -> tuple[float | None, dict | None]:
+    if value in [None, ""]:
+        return None, None
+    if isinstance(value, (int, float)):
+        return float(value), None
+
+    text = str(value)
+    avg_match = re.search(r"(?:平均值|均值|约|≈|~)\s*(\d+(?:\.\d+)?)", text)
+    range_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:-|–|—|至|到|~|～)\s*(\d+(?:\.\d+)?)", text)
+    if range_match:
+        low = float(range_match.group(1))
+        high = float(range_match.group(2))
+        if high < low:
+            low, high = high, low
+        if avg_match:
+            number = float(avg_match.group(1))
+        else:
+            number = (low + high) / 2
+        return round(number, 2), {"min": low, "max": high}
+
+    inequality_match = re.search(
+        r"(?:[<≤]|小于|低于|少于|不超过)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:\+|以上|及以上|起)",
+        text,
+        flags=re.I,
+    )
+    if inequality_match:
+        number = inequality_match.group(1) or inequality_match.group(2)
+        return float(number), None
+
+    unit_patterns = {
+        "volume": r"(\d+(?:\.\d+)?)\s*ml",
+        "caffeine": r"(\d+(?:\.\d+)?)\s*mg",
+        "sugar": r"(\d+(?:\.\d+)?)\s*g",
+    }
+    match = re.search(unit_patterns.get(field, r"(\d+(?:\.\d+)?)"), text, flags=re.I)
+    if match:
+        return float(match.group(1)), None
+    return _safe_float(value), None
+
+
+def _numeric_qualifier_note(value, normalized_value, label: str, unit: str) -> str | None:
+    if value in [None, ""] or normalized_value is None:
+        return None
+    text = str(value).strip()
+    if re.search(r"[<≤]|小于|低于|少于|不超过", text):
+        return f"{label}原值 {text}，按 {normalized_value:g}{unit} 审核"
+    if re.search(r"\d+(?:\.\d+)?\s*(?:\+|以上|及以上|起)", text):
+        return f"{label}原值 {text}，按 {normalized_value:g}{unit} 审核"
+    return None
+
+
+def _range_to_text(value) -> str:
+    if not value:
+        return ""
+    if isinstance(value, dict):
+        low = value.get("min", value.get("low"))
+        high = value.get("max", value.get("high"))
+        if low is not None and high is not None:
+            return f"{low:g}-{high:g}"
+    return str(value)
 
 
 def _safe_float(value):

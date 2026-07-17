@@ -2,6 +2,7 @@
 import {
   addKnowledgeEvidenceApi,
   analyzeKnowledgeImageApi,
+  analyzeKnowledgeTextApi,
   approveKnowledgeEvidenceBulkApi,
   approveKnowledgeEvidenceApi,
   createKnowledgeCandidateApi,
@@ -17,6 +18,8 @@ import { TYPE_DEFINITIONS, getDrinkById, getAllDrinks, addDrink, updateDrink, de
 
 let _onDatabaseChanged = null;
 let _imageAnalysisItems = [];
+let _acquisitionImageObjectUrl = null;
+let _databaseSearchQuery = '';
 
 export function initDatabasePanel(onDatabaseChanged) {
   _onDatabaseChanged = onDatabaseChanged;
@@ -74,6 +77,7 @@ export function initDatabasePanel(onDatabaseChanged) {
   });
 
   document.getElementById('acquisition-image-file')?.addEventListener('change', handleImageFileSelected);
+  setupAcquisitionPasteImport();
 
   document.getElementById('analyze-image-btn')?.addEventListener('click', () => {
     handleAnalyzeImage();
@@ -108,6 +112,8 @@ export function initDatabasePanel(onDatabaseChanged) {
   document.getElementById('bulk-delete-candidates-btn')?.addEventListener('click', () => {
     handleBulkDeleteCandidates();
   });
+
+  setupDatabaseSearch();
 }
 
 // Database Management Functions
@@ -138,18 +144,34 @@ export function renderDatabasePanel() {
     dbCustomCount.textContent = customCount;
   }
   
-  if (drinksTableBody) {
-    renderDrinksTableToElement(allDrinks, drinksTableBody);
-  }
+  refreshDatabaseTableSearch(allDrinks);
 
   renderKnowledgeAcquisitionPanel();
 }
 
+function refreshDatabaseTableSearch(allDrinks = getAllDrinks()) {
+  const drinksTableBody = document.getElementById('drinks-table-body');
+  const filteredDrinks = filterDatabaseDrinks(allDrinks, _databaseSearchQuery);
+  if (drinksTableBody) {
+    renderDrinksTableToElement(filteredDrinks, drinksTableBody);
+  }
+  updateDatabaseSearchCount(filteredDrinks.length, allDrinks.length);
+}
+
 function renderDrinksTableToElement(drinks, container) {
+  if (!drinks.length) {
+    container.innerHTML = `
+      <tr>
+        <td colspan="7" class="drinks-table-empty">没有找到匹配的饮品</td>
+      </tr>
+    `;
+    return;
+  }
+
   container.innerHTML = drinks.map(drink => `
     <tr>
-      <td>${drink.brand || '-'}</td>
-      <td>${drink.name}</td>
+      <td>${escapeHtml(drink.brand || '-')}</td>
+      <td>${escapeHtml(drink.name)}</td>
       <td>${TYPE_DEFINITIONS[drink.type]?.label || formatCandidateType(drink.type)}</td>
       <td>${drink.caffeine}</td>
       <td>${drink.baseSugar}</td>
@@ -298,7 +320,7 @@ function parseAndImportCSV(content) {
     return { success: false, error: 'CSV 文件内容为空或只有表头' };
   }
 
-  const validTypes = ['coffee', 'teacoffee', 'tea', 'milktea', 'fruittea', 'soda'];
+  const validTypes = ['coffee', 'teacoffee', 'tea', 'milktea', 'fruittea', 'soda', 'other'];
   let successCount = 0;
   let errorMessages = [];
 
@@ -572,6 +594,62 @@ function setGroupChildrenChecked(group, checked) {
   });
 }
 
+function setupDatabaseSearch() {
+  const input = document.getElementById('database-search-input');
+  const clearBtn = document.getElementById('database-search-clear');
+  if (!input || !clearBtn) return;
+
+  input.addEventListener('input', () => {
+    _databaseSearchQuery = input.value.trim();
+    refreshDatabaseTableSearch();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (!_databaseSearchQuery && !input.value) return;
+    input.value = '';
+    _databaseSearchQuery = '';
+    refreshDatabaseTableSearch();
+    input.focus();
+  });
+}
+
+function filterDatabaseDrinks(drinks, query) {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return drinks;
+  return drinks.filter(drink => {
+    const typeLabel = TYPE_DEFINITIONS[drink.type]?.label || formatCandidateType(drink.type);
+    const haystack = normalizeSearchText([
+      drink.brand,
+      drink.name,
+      drink.type,
+      typeLabel,
+      drink.caffeine,
+      drink.baseSugar,
+      drink.defaultVolume,
+    ].filter(value => value !== null && value !== undefined).join(' '));
+    return haystack.includes(normalizedQuery);
+  });
+}
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[☕🥥🍵🧋🍋🥤]/gu, '');
+}
+
+function updateDatabaseSearchCount(filteredCount, totalCount) {
+  const count = document.getElementById('database-search-count');
+  const input = document.getElementById('database-search-input');
+  const clearBtn = document.getElementById('database-search-clear');
+  if (input && input.value !== _databaseSearchQuery) input.value = _databaseSearchQuery;
+  if (clearBtn) clearBtn.disabled = !_databaseSearchQuery;
+  if (!count) return;
+  count.textContent = _databaseSearchQuery
+    ? `显示 ${filteredCount} / ${totalCount} 个饮品`
+    : `显示全部 ${totalCount} 个饮品`;
+}
+
 function updateGroupSelectionState(group) {
   if (!group) return;
   const groupInput = group.querySelector('.source-group-select');
@@ -625,6 +703,128 @@ function renderEvidenceItem(evidence) {
   `;
 }
 
+function setupAcquisitionPasteImport() {
+  const panel = document.getElementById('acquisition-paste-panel');
+  const textInput = document.getElementById('acquisition-paste-text');
+  const parseButton = document.getElementById('parse-acquisition-paste-btn');
+  const clearButton = document.getElementById('clear-acquisition-paste-btn');
+  if (!panel || !textInput || !parseButton || !clearButton) return;
+
+  textInput.addEventListener('paste', (event) => {
+    const imageFile = getImageFileFromClipboard(event.clipboardData);
+    if (!imageFile) return;
+    event.preventDefault();
+    applyAcquisitionImageFile(imageFile);
+    setAcquisitionPasteStatus('已粘贴图片，可直接点击“识别图片”。', 'success');
+  });
+
+  panel.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    panel.classList.add('drag-over');
+  });
+  panel.addEventListener('dragleave', () => {
+    panel.classList.remove('drag-over');
+  });
+  panel.addEventListener('drop', (event) => {
+    event.preventDefault();
+    panel.classList.remove('drag-over');
+    const file = Array.from(event.dataTransfer?.files || []).find(item => item.type.startsWith('image/'));
+    if (!file) return;
+    applyAcquisitionImageFile(file);
+    setAcquisitionPasteStatus('已放入图片，可直接点击“识别图片”。', 'success');
+  });
+
+  parseButton.addEventListener('click', async () => {
+    const text = textInput.value.trim();
+    if (!text) {
+      setAcquisitionPasteStatus('先粘贴一段文字，或粘贴截图后点击“识别图片”。', 'error');
+      return;
+    }
+
+    parseButton.disabled = true;
+    parseButton.textContent = 'Agent 识别中...';
+    setAcquisitionPasteStatus('正在交给后端 Agent 识别文字...', 'info');
+
+    try {
+      const data = await analyzeKnowledgeTextApi(text, 'manual_text');
+      const items = data.items || [];
+      if (!items.length) {
+        _imageAnalysisItems = [];
+        renderImageAnalysisItems([], { message: data.message || 'Agent 未识别到可审核的饮品营养项' });
+        setAcquisitionPasteStatus(data.message || '没有识别到可审核的饮品营养项。', 'error');
+        return;
+      }
+
+      const first = items[0];
+      document.getElementById('acquisition-brand').value = first.brand || '';
+      document.getElementById('acquisition-name').value = first.name || '';
+      document.getElementById('acquisition-type').value = first.type || 'coffee';
+      document.getElementById('evidence-raw').value = first.raw_evidence || text;
+      document.getElementById('evidence-source-type').value = 'manual';
+
+      _imageAnalysisItems = items;
+      renderImageAnalysisItems(_imageAnalysisItems, data);
+      setAcquisitionPasteStatus(`Agent 已识别 ${items.length} 条，可检查后点击“批量加入审核”。`, 'success');
+    } catch (e) {
+      _imageAnalysisItems = [];
+      renderImageAnalysisItems([], { message: '文字识别失败，请确认后端已启动' });
+      setAcquisitionPasteStatus(`文字识别失败：${e.message || '请确认后端已启动'}`, 'error');
+    } finally {
+      parseButton.disabled = false;
+      parseButton.textContent = '从文字生成审核项';
+    }
+  });
+
+  clearButton.addEventListener('click', () => {
+    textInput.value = '';
+    clearAcquisitionImageFile();
+    _imageAnalysisItems = [];
+    renderImageAnalysisItems([], { message: '暂无识别结果' });
+    setAcquisitionPasteStatus('已清空粘贴内容。', 'info');
+  });
+}
+
+function getImageFileFromClipboard(clipboardData) {
+  const items = Array.from(clipboardData?.items || []);
+  for (const item of items) {
+    if (!item.type.startsWith('image/')) continue;
+    const file = item.getAsFile();
+    if (!file) continue;
+    return new File([file], file.name || `clipboard-${Date.now()}.png`, { type: file.type || 'image/png' });
+  }
+  return null;
+}
+
+function applyAcquisitionImageFile(file) {
+  const input = document.getElementById('acquisition-image-file');
+  if (!input) return;
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  input.files = transfer.files;
+  handleImageFileSelected({ target: input });
+}
+
+function clearAcquisitionImageFile() {
+  const input = document.getElementById('acquisition-image-file');
+  if (input) input.value = '';
+  const preview = document.getElementById('acquisition-image-preview');
+  if (preview) {
+    preview.className = 'image-preview-empty';
+    preview.textContent = '暂无图片';
+  }
+  if (_acquisitionImageObjectUrl) {
+    URL.revokeObjectURL(_acquisitionImageObjectUrl);
+    _acquisitionImageObjectUrl = null;
+  }
+}
+
+function setAcquisitionPasteStatus(message, tone = 'info') {
+  const status = document.getElementById('acquisition-paste-status');
+  if (!status) return;
+  status.textContent = message;
+  status.className = `acquisition-paste-status ${tone}`;
+}
+
 function handleImageFileSelected(e) {
   const file = e.target.files?.[0];
   const preview = document.getElementById('acquisition-image-preview');
@@ -640,7 +840,9 @@ function handleImageFileSelected(e) {
     return;
   }
 
+  if (_acquisitionImageObjectUrl) URL.revokeObjectURL(_acquisitionImageObjectUrl);
   const url = URL.createObjectURL(file);
+  _acquisitionImageObjectUrl = url;
   preview.className = 'image-preview-box';
   preview.innerHTML = `<img src="${url}" alt="上传图片预览">`;
 }
@@ -660,7 +862,8 @@ async function handleAnalyzeImage() {
   }
 
   try {
-    const data = await analyzeKnowledgeImageApi(file);
+    const contextText = document.getElementById('acquisition-paste-text')?.value.trim() || '';
+    const data = await analyzeKnowledgeImageApi(file, contextText);
     _imageAnalysisItems = data.items || [];
     renderImageAnalysisItems(_imageAnalysisItems, data);
     setAcquisitionResult(data.message || `识别完成：${_imageAnalysisItems.length} 条`, _imageAnalysisItems.length > 0);
@@ -712,11 +915,15 @@ function renderImageAnalysisItems(items, meta = {}) {
 }
 
 function renderImageItemRow(item, index) {
+  const notes = formatImageItemNotes(item);
   return `
     <tr data-image-item-index="${index}">
       <td><input type="checkbox" class="image-item-selected" checked></td>
       <td><input class="image-item-brand" value="${escapeAttr(item.brand || '')}"></td>
-      <td><input class="image-item-name" value="${escapeAttr(item.name || '')}"></td>
+      <td>
+        <input class="image-item-name" value="${escapeAttr(item.name || '')}">
+        ${notes ? `<div class="image-item-note" title="${escapeAttr(notes)}">${escapeHtml(notes)}</div>` : ''}
+      </td>
       <td>
         <select class="image-item-type">
           ${renderTypeOptions(item.type || 'coffee')}
@@ -752,6 +959,10 @@ async function handleStageImageItems() {
       caffeine: parseOptionalNumber(row.querySelector('.image-item-caffeine')?.value),
       sugar: parseOptionalNumber(row.querySelector('.image-item-sugar')?.value),
       volume_note: original.volume_note || null,
+      caffeine_range: original.caffeine_range || null,
+      sugar_range: original.sugar_range || null,
+      volume_range: original.volume_range || null,
+      normalization_notes: original.normalization_notes || [],
       raw_evidence: original.raw_evidence || name,
       confidence: original.confidence || 0.65
     });
@@ -851,6 +1062,23 @@ async function handleBulkApproveEvidence() {
   } catch (e) {
     setAcquisitionResult(`批量入库失败：${e.message || '请确认后端已启动'}`, false);
   }
+}
+
+function formatImageItemNotes(item) {
+  const notes = [];
+  if (item.volume_note) notes.push(item.volume_note);
+  if (item.caffeine_range) notes.push(`咖啡因原范围 ${formatRange(item.caffeine_range)}mg`);
+  if (item.sugar_range) notes.push(`糖分原范围 ${formatRange(item.sugar_range)}g`);
+  if (Array.isArray(item.normalization_notes)) notes.push(...item.normalization_notes);
+  return notes.filter(Boolean).join('；');
+}
+
+function formatRange(range) {
+  if (!range) return '';
+  if (typeof range === 'string') return range;
+  const min = range.min ?? range.low ?? '';
+  const max = range.max ?? range.high ?? '';
+  return min !== '' && max !== '' ? `${min}-${max}` : '';
 }
 
 async function handleApproveEvidenceGroup(idsText) {
@@ -1027,6 +1255,7 @@ function formatCandidateType(type) {
     fruittea: '果茶',
     fruit_tea: '果茶',
     soda: '汽水',
+    other: '其他',
   };
   return labels[type] || type || '-';
 }

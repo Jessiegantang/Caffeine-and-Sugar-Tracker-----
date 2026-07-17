@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 
+from agents.knowledge_text_agent import analyze_text_with_agent
 from knowledge.knowledge_acquisition_agent import (
     add_nutrition_evidence,
     analyze_image_with_vision,
@@ -32,17 +33,32 @@ def create_product_candidate(db, input_data) -> dict:
     return {"status": "success", "candidate": serialize_candidate(candidate)}
 
 
-def analyze_acquisition_image(image_bytes: bytes, content_type: str, filename: str | None = None) -> dict:
+def analyze_acquisition_image(
+    image_bytes: bytes,
+    content_type: str,
+    filename: str | None = None,
+    context_text: str = "",
+) -> dict:
     if not content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are supported")
     if len(image_bytes) > 8 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image is too large; max size is 8MB")
-    result = analyze_image_with_vision(image_bytes, content_type, filename)
+    result = analyze_image_with_vision(image_bytes, content_type, filename, context_text)
     return {"status": "success", **result}
 
 
 def import_acquisition_image_items(db, input_data) -> dict:
     result = stage_image_items(db, input_data.items, input_data.source_type)
+    return {"status": "success", **result}
+
+
+def analyze_acquisition_text(input_data) -> dict:
+    text = (input_data.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    if len(text) > 20000:
+        raise HTTPException(status_code=400, detail="Text is too long; max length is 20000 characters")
+    result = analyze_text_with_agent(text, input_data.source_type)
     return {"status": "success", **result}
 
 

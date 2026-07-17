@@ -87,6 +87,11 @@ class ImageImportInput(BaseModel):
     items: List[Dict[str, Any]]
 
 
+class TextAnalyzeInput(BaseModel):
+    text: str
+    source_type: str = "manual_text"
+
+
 class BulkIdsInput(BaseModel):
     ids: List[str]
 

@@ -210,9 +210,10 @@ export async function deleteKnowledgeCandidatesBulkApi(ids) {
   return response.json();
 }
 
-export async function analyzeKnowledgeImageApi(file) {
+export async function analyzeKnowledgeImageApi(file, contextText = '') {
   const formData = new FormData();
   formData.append('file', file);
+  if (contextText) formData.append('context_text', contextText);
   const response = await fetch(`${API_BASE}/api/knowledge/acquisition/image/analyze`, {
     method: 'POST',
     body: formData
@@ -228,6 +229,16 @@ export async function importKnowledgeImageItemsApi(items, sourceType = 'image_up
     body: JSON.stringify({ items, source_type: sourceType })
   });
   if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to import knowledge image items'));
+  return response.json();
+}
+
+export async function analyzeKnowledgeTextApi(text, sourceType = 'manual_text') {
+  const response = await fetch(`${API_BASE}/api/knowledge/acquisition/text/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, source_type: sourceType })
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to analyze pasted text'));
   return response.json();
 }
 
