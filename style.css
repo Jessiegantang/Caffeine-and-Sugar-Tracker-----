@@ -55,32 +55,6 @@ body {
   padding: 2.5rem 2rem;
 }
 
-/* Decorative Background */
-.blur-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(120px);
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.4;
-}
-
-.shape-1 {
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, var(--caffeine-primary) 0%, transparent 70%);
-  top: -150px;
-  right: -100px;
-}
-
-.shape-2 {
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, var(--sugar-primary) 0%, transparent 70%);
-  bottom: -100px;
-  left: -50px;
-}
-
 /* Container */
 .container {
   width: 100%;
@@ -2382,10 +2356,6 @@ body {
   padding: 28px 24px 40px;
 }
 
-.blur-glow {
-  display: none;
-}
-
 .container,
 .main-content,
 .database-full-width {
@@ -3014,6 +2984,10 @@ body {
 @media (max-width: 960px) {
   body {
     padding: 18px 14px 30px;
+  }
+
+  .workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .app-header {
