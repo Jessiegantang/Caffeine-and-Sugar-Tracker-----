@@ -8,6 +8,14 @@ from services.memory_service import apply_memory_updates, extract_memory_updates
 from services.trace_service import save_agent_trace
 
 
+INTAKE_FOLLOW_UP_MARKERS = (
+    "甜度是",
+    "大概多少 ml",
+    "饮品叫什么名字",
+    "还需要一点信息",
+)
+
+
 def serialize_chat_log(log: ChatLog) -> dict:
     return {"role": log.role, "content": log.content}
 
@@ -38,6 +46,35 @@ def build_companion_context(db, date: str) -> dict:
     }
 
 
+def complete_pending_intake(history: list[dict], message: str, parsed_intake: dict) -> dict:
+    if parsed_intake.get("intent") == "log_drink" or not history:
+        return parsed_intake
+
+    latest_message = history[-1]
+    if latest_message.get("role") != "assistant":
+        return parsed_intake
+    if not any(marker in latest_message.get("content", "") for marker in INTAKE_FOLLOW_UP_MARKERS):
+        return parsed_intake
+
+    user_messages = [item["content"] for item in history[-8:] if item.get("role") == "user"]
+    for index in range(len(user_messages) - 1, -1, -1):
+        pending = parse_intake_message(user_messages[index])
+        if pending.get("intent") != "log_drink":
+            continue
+        if not pending.get("missing_fields"):
+            break
+
+        combined_message = "。补充：".join(user_messages[index:] + [message])
+        completed = parse_intake_message(combined_message)
+        if completed.get("intent") != "log_drink":
+            break
+        if len(completed.get("missing_fields") or []) < len(pending.get("missing_fields") or []):
+            return completed
+        break
+
+    return parsed_intake
+
+
 def send_chat_message(db, input_data) -> dict:
     # 1. Save user message
     now_str = datetime.datetime.now().isoformat()
@@ -54,6 +91,7 @@ def send_chat_message(db, input_data) -> dict:
 
     # 4. Parse possible drink logging action before falling back to companion chat
     parsed_intake = parse_intake_message(input_data.message)
+    parsed_intake = complete_pending_intake(history, input_data.message, parsed_intake)
     if parsed_intake.get("intent") == "log_drink":
         memory_updates = extract_memory_updates(input_data.message, "log_drink", parsed_intake, db)
         if parsed_intake.get("missing_fields"):

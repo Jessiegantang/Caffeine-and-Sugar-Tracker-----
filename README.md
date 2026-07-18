@@ -59,6 +59,7 @@ flowchart LR
 ### 1. 安装前端依赖
 
 ```bash
+cd frontend
 npm install
 ```
 
@@ -121,6 +122,7 @@ http://127.0.0.1:8000
 ### 7. 启动前端
 
 ```bash
+cd frontend
 npm run dev
 ```
 
@@ -216,11 +218,16 @@ backend/
   scripts/                        后端维护脚本
   tests/                          单元测试与离线 eval
 
-src/
-  api.js                          前端 API client
-  components/                     聊天框、数据库面板、审核 UI
-  state.js                        前端状态与 DOM 引用
-  storage.js                      本地存储
+frontend/
+  src/
+    api.js                        前端 API client
+    components/                   Vue 聊天框、数据库面板、审核 UI
+    composables/                  Vue 组合式逻辑
+    state.js                      前端状态
+    storage.js                    本地存储
+  tests/                          前端单元测试与烟雾测试
+  package.json                    Vue/Vite 依赖与命令
+  vite.config.js                  Vite 配置
 
 scripts/
   quality_gate.ps1                本地质量检查脚本

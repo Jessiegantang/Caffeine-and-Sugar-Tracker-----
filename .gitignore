@@ -12,3 +12,5 @@ backend/.env
 backend/chroma_db/
 *.docx
 *.pdf
+
+docs/

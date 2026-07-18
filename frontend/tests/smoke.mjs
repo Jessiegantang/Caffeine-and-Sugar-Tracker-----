@@ -29,6 +29,7 @@ const server = createServer(async (request, response) => {
 
 let browser;
 let page;
+const chatHistory = [];
 try {
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -41,6 +42,26 @@ try {
   });
   page = await browser.newPage();
   page.setDefaultTimeout(10_000);
+  await page.setRequestInterception(true);
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (!['localhost', '127.0.0.1'].includes(url.hostname) || url.port !== '8000' || !url.pathname.startsWith('/api/')) {
+      request.continue();
+      return;
+    }
+
+    const isPreflight = request.method() === 'OPTIONS';
+    request.respond({
+      status: isPreflight ? 204 : 200,
+      contentType: 'application/json',
+      headers: {
+        'access-control-allow-origin': 'http://127.0.0.1:4175',
+        'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+        'access-control-allow-headers': 'content-type',
+      },
+      body: isPreflight ? '' : JSON.stringify(mockApiResponse(request, url, chatHistory)),
+    });
+  });
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.setViewport({ width: 1440, height: 1000 });
@@ -55,6 +76,14 @@ try {
   assert.notEqual(initial.daily, 'none');
   assert.equal(initial.database, 'none');
   assert.equal(initial.hasExplainability, true);
+
+  await page.type('#chat-input', '我刚刚早上喝了一杯瑞幸的超大杯苹果茉莉冰奶，微微甜');
+  await page.click('#chat-send-btn');
+  await page.waitForFunction(() => !document.querySelector('#chat-input').disabled);
+  await page.type('#chat-input', '应该是三分糖');
+  await page.click('#chat-send-btn');
+  await page.waitForSelector('.chat-add-log-btn:not([disabled])');
+  assert.match(await page.$eval('.chat-add-log-btn', element => element.textContent), /添加到当天摄入记录/);
 
   await page.click('[data-tab="tab-database"]');
   await page.waitForFunction(() => getComputedStyle(document.getElementById('tab-database')).display !== 'none');
@@ -92,4 +121,36 @@ function contentType(filePath) {
     '.json': 'application/json; charset=utf-8',
     '.svg': 'image/svg+xml',
   })[extname(filePath)] || 'application/octet-stream';
+}
+
+function mockApiResponse(request, url, history) {
+  if (url.pathname === '/api/chat' && request.method() === 'GET') {
+    return { status: 'success', history };
+  }
+  if (url.pathname === '/api/chat' && request.method() === 'POST') {
+    const { message } = JSON.parse(request.postData() || '{}');
+    const complete = message.includes('三分糖');
+    history.push(
+      { role: 'user', content: message },
+      { role: 'assistant', content: complete ? '饮品信息已补充完整。' : '这杯甜度是无糖、三分糖、半糖、七分糖还是全糖？' },
+    );
+    return {
+      status: 'success',
+      parsed_intake: {
+        intent: 'log_drink',
+        brand: '瑞幸咖啡',
+        name: '苹果茉莉冰奶',
+        type: 'coffee',
+        volume: 650,
+        sugar: complete ? 'three' : null,
+        time: 'now',
+        missing_fields: complete ? [] : ['sugar'],
+      },
+    };
+  }
+  if (url.pathname === '/api/agent/act') return { agent_state: {} };
+  if (url.pathname === '/api/logs' || url.pathname === '/api/knowledge_base') return [];
+  if (url.pathname.endsWith('/candidates')) return { candidates: [] };
+  if (url.pathname.endsWith('/evidence')) return { evidence: [] };
+  return {};
 }

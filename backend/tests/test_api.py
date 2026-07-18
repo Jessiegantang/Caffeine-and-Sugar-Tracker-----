@@ -2,6 +2,7 @@
 import sys
 import unittest
 import json
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -9,7 +10,7 @@ from fastapi.testclient import TestClient
 
 import main
 from workflows.nutrition_pipeline import estimate_drink_nutrition
-from db.database import DrinkKnowledge, DrinkLog, NutritionEvidence, ProductCandidate, SessionLocal
+from db.database import AgentTrace, ChatLog, DrinkKnowledge, DrinkLog, NutritionEvidence, ProductCandidate, SessionLocal
 
 
 class ApiTests(unittest.TestCase):
@@ -66,6 +67,41 @@ class ApiTests(unittest.TestCase):
         parsed = response.json()["parsed_intake"]
         self.assertEqual(parsed["intent"], "log_drink")
         self.assertEqual(parsed["sugar"], "three")
+
+    @patch.dict(os.environ, {"ENABLE_LLM": "false", "DRINKMIND_OFFLINE": "true"})
+    def test_chat_follow_up_completes_pending_intake(self):
+        date = "2099-01-02"
+        trace_ids = []
+        try:
+            first = self.client.post("/api/chat", json={
+                "date": date,
+                "message": "我刚刚早上喝了一杯瑞幸的超大杯的苹果茉莉冰奶，微微甜",
+            })
+            self.assertEqual(first.status_code, 200)
+            trace_ids.append(first.json()["trace_id"])
+            self.assertEqual(first.json()["parsed_intake"]["missing_fields"], ["sugar"])
+
+            second = self.client.post("/api/chat", json={
+                "date": date,
+                "message": "应该是三分糖",
+            })
+            self.assertEqual(second.status_code, 200)
+            trace_ids.append(second.json()["trace_id"])
+            parsed = second.json()["parsed_intake"]
+            self.assertEqual(parsed["intent"], "log_drink")
+            self.assertEqual(parsed["name"], "苹果茉莉冰奶")
+            self.assertEqual(parsed["volume"], 650)
+            self.assertEqual(parsed["sugar"], "three")
+            self.assertEqual(parsed["missing_fields"], [])
+        finally:
+            db = SessionLocal()
+            try:
+                db.query(ChatLog).filter(ChatLog.date == date).delete(synchronize_session=False)
+                if trace_ids:
+                    db.query(AgentTrace).filter(AgentTrace.id.in_(trace_ids)).delete(synchronize_session=False)
+                db.commit()
+            finally:
+                db.close()
 
     def test_agent_act_records_trace(self):
         response = self.client.post("/api/agent/act", json={

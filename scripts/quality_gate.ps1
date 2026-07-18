@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RootDir "backend"
+$FrontendDir = Join-Path $RootDir "frontend"
 $TempRunDir = Join-Path $env:TEMP ("drinkmind-quality-gate-" + [guid]::NewGuid().ToString("N"))
 $TempDbPath = Join-Path $TempRunDir "test_drinks.db"
 $TempChromaDir = Join-Path $TempRunDir "chroma_db"
@@ -75,7 +76,7 @@ try {
     }
 
     Invoke-Step "4. Frontend build" {
-        Push-Location $RootDir
+        Push-Location $FrontendDir
         try {
             & npm.cmd run build -- --outDir $TempDistDir
         }
