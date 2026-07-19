@@ -26,21 +26,22 @@ DrinkMind 是一个面向咖啡、奶茶、果茶等饮品记录场景的 Agenti
 
 ```mermaid
 flowchart LR
-  A["用户自然语言输入"] --> B["Intake Parser"]
-  B --> C["LangGraph Orchestrator"]
-  C --> D{"是否缺少关键字段"}
-  D -->|是| E["追问容量/甜度等信息"]
-  D -->|否| F["Nutrition Pipeline"]
-  F --> G["SQL 知识库精确匹配"]
-  F --> H["Chroma / RAG 相似检索"]
-  F --> I["Composition Estimation 降级估算"]
-  G --> J["结果校验与可解释性输出"]
-  H --> J
-  I --> J
-  J --> K["饮品日志与风险判断"]
-  K --> L["用户反馈纠正"]
-  L --> M["Evidence 审核"]
-  M --> N["写入正式知识库"]
+  A["用户自然语言输入"] --> B{"Dify 是否可用"}
+  B -->|可用且返回有效结构| C["Dify Intake"]
+  B -->|不可用或失败| D["LLM Intake Agent"]
+  D -->|调用或结构失败| E["本地字段规则"]
+  C --> F["唯一 parsed_intake"]
+  D --> F
+  E --> F
+  F --> G["LangGraph Orchestrator"]
+  G --> H{"是否缺少关键字段"}
+  H -->|是| I["追问容量/甜度等信息"]
+  H -->|否| J["Nutrition Pipeline"]
+  J --> K["SQL / Chroma RAG 检索"]
+  J --> L["Composition Agent 补缺"]
+  K --> M["结果校验与可解释性输出"]
+  L --> M
+  M --> N["风险判断与用户确认"]
 ```
 
 营养估算工作流位于 `backend/workflows/nutrition_pipeline.py`，主要节点包括：
@@ -94,8 +95,8 @@ CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 ### 可选：接入 Dify 陪伴助手
 
-项目可以把非饮品记录类的陪伴问答交给 Dify Chatflow，同时保留原有本地
-`companion_agent` 作为自动降级方案。前端和 `/api/chat` 接口无需改变。
+项目可以把陪伴问答和饮品自然语言解析优先交给 Dify Chatflow。Dify 返回的
+`parsed_intake` 会直接进入本地 LangGraph，不会再被本地解析器重复解析。
 
 ```env
 COMPANION_PROVIDER=dify
@@ -106,8 +107,9 @@ DIFY_TIMEOUT_SECONDS=60
 ```
 
 FastAPI 会把今日咖啡因、今日糖分、睡眠时长、用户偏好和最近聊天记录作为
-Chatflow 输入变量发送给 Dify。设置 `COMPANION_PROVIDER=local`、启用
-`DRINKMIND_OFFLINE`、未配置密钥或 Dify 请求失败时，系统都会继续使用本地陪伴助手。
+Chatflow 输入变量发送给 Dify。Dify 不可用、请求失败或返回的饮品结构不合法时，
+系统依次降级到结构化 LLM Intake Agent 和本地字段规则；规则仍无法得到必要字段时
+才向用户追问。营养数值始终由本地 SQL/RAG 与营养 LangGraph 计算。
 真实密钥只能保存在 `backend/.env`，不要写入前端或提交到版本库。
 
 ### 4. 初始化数据库

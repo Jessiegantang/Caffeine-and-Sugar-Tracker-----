@@ -1,21 +1,21 @@
 import uuid
 
-from agents.intake_parser import parse_intake_message
+from agents.intake_parser import parse_intake_with_fallback
 from agents.orchestrator import run_agent_orchestrator
 from services.memory_service import apply_memory_updates
 from services.trace_service import save_agent_trace
 
 
 def parse_intake(db, input_data) -> dict:
-    parsed = parse_intake_message(input_data.message)
+    parsed, intake_provider = parse_intake_with_fallback(input_data.message)
     trace_state = {
         "trace_id": f"trace_{uuid.uuid4().hex[:12]}",
         "user_message": input_data.message,
         "intent": parsed.get("intent"),
-        "agents_called": ["intake_parser"],
-        "tools_used": ["LOCAL_INTAKE_PARSER"],
+        "agents_called": [intake_provider],
+        "tools_used": [intake_provider.upper()],
         "retrieved_docs": [],
-        "model_name": "local",
+        "model_name": "local" if intake_provider == "local_rule_intake" else "llm",
         "latency_ms": 0.0,
         "final_action": "parse_intake",
         "error": None,

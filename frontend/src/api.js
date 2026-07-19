@@ -98,16 +98,6 @@ export async function parseIntakeApi(date, message) {
   return response.json();
 }
 
-export async function agentActApi(date, message) {
-  const response = await fetch(`${API_BASE}/api/agent/act`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, message })
-  });
-  if (!response.ok) throw new Error('Failed to run agent action');
-  return response.json();
-}
-
 export async function fetchUserPreferencesApi() {
   const response = await fetch(`${API_BASE}/api/user/preferences`);
   if (!response.ok) throw new Error('Failed to fetch user preferences');

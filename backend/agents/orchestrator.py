@@ -10,7 +10,7 @@ from db.database import ChatLog, DrinkLog, SleepRecord
 from services.memory_service import extract_memory_updates, read_user_memory
 from services.nutrition_estimation_service import estimate_from_parsed_drink
 from .companion_agent import generate_companion_response
-from .intake_parser import parse_intake
+from .intake_parser import parse_intake_with_fallback
 from rules.risk_agent import evaluate_daily_risk
 
 
@@ -20,6 +20,7 @@ class DrinkMindAgentState(TypedDict, total=False):
     date: str
     db: Any
     intent: str
+    intake_provider: str
     parsed_drink: dict
     nutrition_result: dict
     risk_result: dict
@@ -35,9 +36,22 @@ class DrinkMindAgentState(TypedDict, total=False):
     error: str | None
 
 
-def run_agent_orchestrator(user_message: str, date: str, db) -> dict:
+def run_agent_orchestrator(
+    user_message: str,
+    date: str,
+    db,
+    *,
+    parsed_intake: dict | None = None,
+    intake_provider: str | None = None,
+) -> dict:
     started_at = time.perf_counter()
-    state = _initial_state(user_message, date, db)
+    state = _initial_state(
+        user_message,
+        date,
+        db,
+        parsed_intake=parsed_intake,
+        intake_provider=intake_provider,
+    )
 
     try:
         result = app_graph.invoke(state)
@@ -49,20 +63,30 @@ def run_agent_orchestrator(user_message: str, date: str, db) -> dict:
         return _finish_state(state, started_at)
 
 
-def _initial_state(user_message: str, date: str, db) -> DrinkMindAgentState:
+def _initial_state(
+    user_message: str,
+    date: str,
+    db,
+    *,
+    parsed_intake: dict | None = None,
+    intake_provider: str | None = None,
+) -> DrinkMindAgentState:
+    parsed = dict(parsed_intake or {})
+    provider = intake_provider or ""
     return {
         "trace_id": f"trace_{uuid.uuid4().hex[:12]}",
         "user_message": user_message,
         "date": date,
         "db": db,
-        "intent": "",
-        "parsed_drink": {},
+        "intent": parsed.get("intent") or "",
+        "intake_provider": provider,
+        "parsed_drink": parsed,
         "nutrition_result": {},
         "risk_result": {},
         "memory_updates": {},
         "actions": [],
         "final_response": "",
-        "agents_called": [],
+        "agents_called": [provider] if provider else [],
         "tools_used": [],
         "retrieved_docs": [],
         "model_name": os.getenv("MODEL_NAME", "local"),
@@ -73,10 +97,11 @@ def _initial_state(user_message: str, date: str, db) -> DrinkMindAgentState:
 
 
 def _parse_intake_node(state: DrinkMindAgentState) -> DrinkMindAgentState:
-    parsed = parse_intake(state["user_message"])
+    parsed, provider = parse_intake_with_fallback(state["user_message"])
     state["parsed_drink"] = parsed
     state["intent"] = _route_intent(state["user_message"], parsed)
-    state["agents_called"].append("intake_parser")
+    state["intake_provider"] = provider
+    state["agents_called"].append(provider)
     return state
 
 
@@ -145,6 +170,12 @@ def _route_log_drink(state: DrinkMindAgentState) -> str:
     return "ask_follow_up" if missing else "estimate_nutrition"
 
 
+def _route_from_start(state: DrinkMindAgentState) -> str:
+    if not state.get("parsed_drink"):
+        return "parse_intake"
+    return "log_drink" if state.get("intent") == "log_drink" else "ask_advice"
+
+
 def _build_graph():
     graph = StateGraph(DrinkMindAgentState)
     graph.add_node("parse_intake", _parse_intake_node)
@@ -153,7 +184,15 @@ def _build_graph():
     graph.add_node("estimate_nutrition", _nutrition_log_node)
     graph.add_node("ask_advice", _advice_node)
 
-    graph.add_edge(START, "parse_intake")
+    graph.add_conditional_edges(
+        START,
+        _route_from_start,
+        {
+            "parse_intake": "parse_intake",
+            "log_drink": "log_drink_gate",
+            "ask_advice": "ask_advice",
+        },
+    )
     graph.add_conditional_edges(
         "parse_intake",
         _route_from_parse,

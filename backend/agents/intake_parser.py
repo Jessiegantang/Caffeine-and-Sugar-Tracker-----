@@ -280,40 +280,40 @@ def _parse_intake_locally(user_message: str) -> dict:
     return result
 
 
-def parse_intake_message(user_message: str) -> dict:
-    local_result = _parse_intake_locally(user_message)
-    if local_result["intent"] != "log_drink":
-        return local_result
-    if not local_result.get("missing_fields"):
-        return local_result
+def parse_intake_with_llm(user_message: str) -> dict:
+    """Parse with the structured Intake Agent without running local rules first."""
     if not llm_enabled():
-        return local_result
+        raise RuntimeError("LLM intake parsing is disabled")
 
-    try:
-        prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                "You are DrinkMind Intake Parser. Extract a drink logging intent from Chinese natural language. "
-                "Return structured fields only. Do not invent unknown required fields. "
-                "Sugar must be one of none, three, half, seven, full, unknown. "
-                "Type must be one of coffee, milktea, tea, fruittea, soda.",
-            ),
-            ("user", "{message}"),
-        ])
-        structured_llm = llm.with_structured_output(IntakeParseResult, method="function_calling")
-        parsed = (prompt | structured_llm).invoke({"message": user_message})
-        result = parsed.dict()
-        for key, value in local_result.items():
-            if result.get(key) in [None, "", "unknown"] and value not in [None, "", "unknown"]:
-                result[key] = value
-        result["intent"] = result.get("intent") or "log_drink"
-        result["missing_fields"] = _build_missing_fields(result)
-        result["follow_up"] = _build_follow_up(result["missing_fields"])
-        return result
-    except Exception as e:
-        print(f"[Intake Parser] Falling back to local parser: {e}", flush=True)
-        return local_result
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are DrinkMind Intake Parser. Classify the intent and extract drink fields from Chinese natural language. "
+            "Return structured fields only. Do not invent unknown required fields. "
+            "Sugar must be one of none, three, half, seven, full, unknown. "
+            "Type must be one of coffee, milktea, tea, fruittea, soda. "
+            "For advice or casual conversation, use intent=ask_advice and leave drink fields empty.",
+        ),
+        ("user", "{message}"),
+    ])
+    structured_llm = llm.with_structured_output(IntakeParseResult, method="function_calling")
+    parsed = (prompt | structured_llm).invoke({"message": user_message})
+    result = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed.dict()
+    result["intent"] = result.get("intent") or "ask_advice"
+    result["missing_fields"] = _build_missing_fields(result) if result["intent"] == "log_drink" else []
+    result["follow_up"] = _build_follow_up(result["missing_fields"])
+    return result
 
 
-def parse_intake(user_message: str) -> dict:
-    return parse_intake_message(user_message)
+def parse_intake_with_fallback(user_message: str) -> tuple[dict, str]:
+    """Use the Intake Agent first and local extraction rules only as a safety fallback."""
+    if llm_enabled():
+        try:
+            return parse_intake_with_llm(user_message), "llm_intake_agent"
+        except Exception as error:
+            print(f"[Intake Parser] LLM failed; using local rules: {error}", flush=True)
+    return _parse_intake_locally(user_message), "local_rule_intake"
+
+
+def parse_intake_message(user_message: str) -> dict:
+    return parse_intake_with_fallback(user_message)[0]

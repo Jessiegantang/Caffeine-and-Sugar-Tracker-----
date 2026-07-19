@@ -64,6 +64,14 @@ class DifyFirstChatRouterTests(unittest.TestCase):
         try:
             with patch("services.chat_service.dify_available", return_value=True), \
                     patch("services.chat_service.generate_dify_turn", side_effect=[first_turn, second_turn]) as generate, \
+                    patch(
+                        "services.chat_service.parse_intake_with_fallback",
+                        side_effect=AssertionError("Dify intake must not be parsed again"),
+                    ) as local_parse, \
+                    patch(
+                        "agents.orchestrator.parse_intake_with_fallback",
+                        side_effect=AssertionError("Pre-parsed intake must skip the parser node"),
+                    ) as graph_parse, \
                     patch("services.chat_service.extract_memory_updates", return_value={}):
                 first = self.client.post("/api/chat", json={
                     "date": date,
@@ -79,6 +87,11 @@ class DifyFirstChatRouterTests(unittest.TestCase):
             self.assertEqual(second.status_code, 200)
             self.assertEqual(second.json()["parsed_intake"]["name"], "生椰拿铁")
             self.assertEqual(second.json()["parsed_intake"]["volume"], 500)
+            self.assertEqual(second.json()["provider"], "dify")
+            self.assertEqual(second.json()["intake_provider"], "dify_assistant")
+            self.assertEqual(second.json()["nutrition_result"]["volume"], 500)
+            local_parse.assert_not_called()
+            graph_parse.assert_not_called()
             second_history = generate.call_args_list[1].args[1]
             self.assertEqual(second_history[0]["role"], "user")
             self.assertIn("瑞幸生椰拿铁", second_history[0]["content"])
@@ -106,6 +119,10 @@ class DifyFirstChatRouterTests(unittest.TestCase):
             self.assertEqual(parsed["intent"], "log_drink")
             self.assertEqual(parsed["volume"], 500)
             self.assertEqual(parsed["sugar"], "three")
+            self.assertEqual(response.json()["provider"], "local")
+            self.assertEqual(response.json()["intake_provider"], "local_rule_intake")
+            self.assertEqual(response.json()["fallback_reason"], "timeout")
+            self.assertIsNotNone(response.json()["nutrition_result"])
         finally:
             self._cleanup_date(date)
 

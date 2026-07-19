@@ -114,10 +114,11 @@ class LLMOfflineControlTests(unittest.TestCase):
         }):
             with patch.object(intake_parser, "llm", RaisingLLM()):
                 with patch.object(intake_parser, "_parse_intake_locally", return_value=incomplete_local_parse()):
-                    result = intake_parser.parse_intake_message("fake drink")
+                    result, provider = intake_parser.parse_intake_with_fallback("fake drink")
 
         self.assertEqual(result["missing_fields"], ["sugar"])
         self.assertEqual(result["follow_up"], "Which sugar level?")
+        self.assertEqual(provider, "local_rule_intake")
 
     def test_report_agent_returns_local_report_without_llm_when_disabled(self):
         logs = [{"name": "Offline Latte", "caffeine": 120, "sugarContent": 12}]
@@ -203,12 +204,29 @@ class LLMOfflineControlTests(unittest.TestCase):
             "OPENAI_API_KEY": "real-looking-key",
         }):
             with patch.object(intake_parser, "llm", fake_llm):
-                with patch.object(intake_parser, "_parse_intake_locally", return_value=incomplete_local_parse()):
-                    result = intake_parser.parse_intake_message("fake drink")
+                with patch.object(intake_parser, "_parse_intake_locally") as local_parser:
+                    result, provider = intake_parser.parse_intake_with_fallback("fake drink")
 
         self.assertTrue(fake_llm.called)
+        local_parser.assert_not_called()
+        self.assertEqual(provider, "llm_intake_agent")
         self.assertEqual(result["sugar"], "half")
         self.assertEqual(result["missing_fields"], [])
+
+    def test_parse_intake_uses_rules_only_after_llm_failure(self):
+        local_result = incomplete_local_parse()
+        with patch.dict(os.environ, {
+            "ENABLE_LLM": "true",
+            "DRINKMIND_OFFLINE": "false",
+            "OPENAI_API_KEY": "real-looking-key",
+        }):
+            with patch.object(intake_parser, "llm", RaisingLLM()):
+                with patch.object(intake_parser, "_parse_intake_locally", return_value=local_result) as local_parser:
+                    result, provider = intake_parser.parse_intake_with_fallback("fake drink")
+
+        local_parser.assert_called_once_with("fake drink")
+        self.assertEqual(provider, "local_rule_intake")
+        self.assertEqual(result, local_result)
 
 
 if __name__ == "__main__":

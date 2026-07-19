@@ -1,7 +1,6 @@
 <script setup>
 import { nextTick, ref, watch } from 'vue';
 import {
-  agentActApi,
   fetchChatHistoryApi,
   sendChatMessageApi,
 } from '../api.js';
@@ -67,25 +66,15 @@ async function sendMessage() {
     if (canAddParsedIntake(parsedIntake)) {
       parsedIntakes.value.push({ ...parsedIntake, submitted: false });
       emitAppEvent(INTAKE_PARSED_EVENT, parsedIntake);
-      await estimateParsedIntake(message);
+    }
+    if (data.nutrition_result) {
+      emitAppEvent(NUTRITION_RESULT_EVENT, data.nutrition_result);
     }
     await scrollToBottom();
   } catch {
     error.value = '发送失败，请检查网络和后端服务。';
   } finally {
     sending.value = false;
-  }
-}
-
-async function estimateParsedIntake(message) {
-  try {
-    const action = await agentActApi(state.selectedDate, message);
-    const nutritionResult = action.agent_state?.nutrition_result;
-    if (nutritionResult) {
-      emitAppEvent(NUTRITION_RESULT_EVENT, nutritionResult);
-    }
-  } catch (agentError) {
-    console.error('Agent act estimate failed', agentError);
   }
 }
 
