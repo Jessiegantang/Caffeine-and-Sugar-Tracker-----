@@ -142,10 +142,6 @@ function optionalNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function confidence(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? `${Math.round(number * 100)}%` : '-';
-}
 </script>
 
 <template>
@@ -166,8 +162,8 @@ function confidence(value) {
         <div class="section-header-row compact-row"><h4 class="subsection-title">识别结果</h4><button type="button" class="btn btn-primary" :disabled="!items.length || staging" @click="stageItems">{{ staging ? '提交中...' : '批量加入审核' }}</button></div>
         <div class="image-analysis-result">
           <div v-if="!items.length" class="acquisition-empty">暂无识别结果</div>
-          <div v-else class="image-items-table-wrap"><table class="image-items-table"><thead><tr><th>选</th><th>品牌</th><th>饮品</th><th>类型</th><th>容量</th><th>咖啡因</th><th>糖分</th><th>置信度</th></tr></thead><tbody>
-            <tr v-for="(item, index) in items" :key="index"><td><input v-model="item.selected" type="checkbox"></td><td><input v-model="item.brand"></td><td><input v-model="item.name"></td><td><select v-model="item.type"><option v-for="type in types" :key="type.value" :value="type.value">{{ type.label }}</option></select></td><td><input v-model="item.volume" type="number" placeholder="ml"></td><td><input v-model="item.caffeine" type="number" placeholder="mg"></td><td><input v-model="item.sugar" type="number" placeholder="未知"></td><td>{{ confidence(item.confidence) }}</td></tr>
+          <div v-else class="image-items-table-wrap"><table class="image-items-table"><thead><tr><th>选</th><th>品牌</th><th>饮品</th><th>类型</th><th>容量</th><th>咖啡因</th><th>糖分</th></tr></thead><tbody>
+            <tr v-for="(item, index) in items" :key="index"><td><input v-model="item.selected" type="checkbox"></td><td><input v-model="item.brand"></td><td><input v-model="item.name"></td><td><select v-model="item.type"><option v-for="type in types" :key="type.value" :value="type.value">{{ type.label }}</option></select></td><td><input v-model="item.volume" type="number" placeholder="ml"></td><td><input v-model="item.caffeine" type="number" placeholder="mg"></td><td><input v-model="item.sugar" type="number" placeholder="未知"></td></tr>
           </tbody></table></div>
         </div>
       </div>

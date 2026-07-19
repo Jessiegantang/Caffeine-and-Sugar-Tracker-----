@@ -17,7 +17,6 @@ def save_agent_trace(db: Session, trace_state: Dict[str, Any]) -> None:
         retrieved_docs=json.dumps(trace_state.get("retrieved_docs", []), ensure_ascii=False),
         model_name=trace_state.get("model_name"),
         latency_ms=trace_state.get("latency_ms"),
-        confidence=trace_state.get("confidence"),
         final_action=trace_state.get("final_action"),
         error=trace_state.get("error"),
     )
@@ -51,7 +50,6 @@ def list_agent_traces(db: Session, limit: int = 20) -> dict:
                 "retrieved_docs": parse_json_list(trace.retrieved_docs),
                 "model_name": trace.model_name,
                 "latency_ms": trace.latency_ms,
-                "confidence": trace.confidence,
                 "final_action": trace.final_action,
                 "error": trace.error,
             }

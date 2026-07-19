@@ -200,7 +200,6 @@ def parse_dify_answer(answer: str) -> dict:
         "volume": volume,
         "sugar": sugar,
         "time": time_value,
-        "confidence": 0.9,
         "missing_fields": [],
         "follow_up": None,
     }

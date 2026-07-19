@@ -38,7 +38,6 @@ class LLMCompositionResult(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     uncertainty_drivers: list[str] = Field(default_factory=list)
-    confidence: float = Field(default=0.55, ge=0.0, le=1.0)
 
 
 def composition_llm_enabled() -> bool:
@@ -122,7 +121,7 @@ def _call_llm_json_fallback(drink: dict) -> LLMCompositionResult:
                 "允许的 keys: drink_type, coffee_base, espresso_shots, tea_base, "
                 "tea_base_ratio, milk_base, milk_ratio, fruit_base, fruit_ratio, "
                 "syrup_pumps, natural_sugar_sources, assumptions, warnings, "
-                "uncertainty_drivers, confidence."
+                "uncertainty_drivers."
             ),
         ),
         (
@@ -163,7 +162,6 @@ def _build_llm_composition(drink: dict, result: LLMCompositionResult) -> dict:
         "assumptions": _dedupe(result.assumptions),
         "warnings": _dedupe(result.warnings),
         "uncertainty_drivers": _dedupe(result.uncertainty_drivers),
-        "confidence": round(_clamp(result.confidence, 0.0, 1.0), 2),
         "input": {
             "brand": drink.get("brand") or "",
             "name": drink.get("name") or "",

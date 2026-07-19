@@ -145,13 +145,7 @@ class CompositionAgentTests(unittest.TestCase):
         self.assertGreater(latte["sugarContent"], 5)
         self.assertGreater(fruit_tea["sugarContent"], 20)
 
-    def test_unknown_sugar_lowers_confidence(self):
-        known = estimate_composition_nutrition({
-            "name": "Latte",
-            "type": "coffee",
-            "volume": 500,
-            "sugar": "half",
-        })
+    def test_unknown_sugar_adds_warning(self):
         unknown = estimate_composition_nutrition({
             "name": "Latte",
             "type": "coffee",
@@ -159,7 +153,6 @@ class CompositionAgentTests(unittest.TestCase):
             "sugar": "mystery",
         })
 
-        self.assertLess(unknown["confidence"], known["confidence"])
         self.assertTrue(unknown["composition"]["warnings"])
 
     def test_output_contains_reasoning_and_components(self):
@@ -183,7 +176,6 @@ class CompositionAgentTests(unittest.TestCase):
             self.assertIn("caffeine_range_mg", component)
             self.assertIn("sugar_range_g", component)
             self.assertIn("basis", component)
-            self.assertIn("confidence", component)
             self.assert_valid_range(component["caffeine_range_mg"], "mg")
             self.assert_valid_range(component["sugar_range_g"], "g")
         self.assert_valid_range(estimate["caffeine_range"], "mg")
@@ -201,7 +193,6 @@ class CompositionAgentTests(unittest.TestCase):
             "caffeine",
             "sugarContent",
             "data_source",
-            "confidence",
             "reasoning",
             "estimation_method",
             "matched_knowledge_id",
@@ -218,7 +209,6 @@ class CompositionAgentTests(unittest.TestCase):
         self.assertEqual(result["composition"]["drink_type"], "unknown")
         self.assertTrue(result["composition"]["warnings"])
         self.assertGreaterEqual(result["sugar_range"]["max"] - result["sugar_range"]["min"], 10.0)
-        self.assertLess(result["confidence"], 0.5)
 
     def test_llm_composition_decomposer_can_be_disabled(self):
         with patch.dict(os.environ, {"ENABLE_LLM_COMPOSITION": "false"}):
@@ -236,7 +226,6 @@ class CompositionAgentTests(unittest.TestCase):
             syrup_pumps=0,
             natural_sugar_sources=["milk", "apple_base"],
             assumptions=["用户选择的奶茶类型作为主要约束。"],
-            confidence=0.82,
         )
         drink = {
             "brand": "Test Brand",

@@ -15,10 +15,8 @@ class DrinkInput(BaseModel):
     endTime: str
     caffeine: float
     sugarContent: float
-    baseSugarDensity: float = None
     status: str = "active"
     data_source: str = "用户录入"
-    confidence: float = 1.0
     reasoning: Any = None
     estimation_method: str = None
     matched_knowledge_id: str = None
@@ -62,7 +60,6 @@ class KnowledgeInput(BaseModel):
     caffeine: float = 0.0
     baseSugar: float = 0.0
     source: str = "前端数据库"
-    confidence: float = 0.9
 
 
 class CandidateInput(BaseModel):
@@ -73,7 +70,6 @@ class CandidateInput(BaseModel):
     source_title: str = None
     source_snippet: str = None
     discovery_method: str = "manual"
-    confidence: float = 0.6
 
 
 class EvidenceInput(BaseModel):

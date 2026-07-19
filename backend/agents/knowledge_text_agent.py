@@ -58,7 +58,6 @@ def _analyze_text_with_llm(text: str, source_type: str) -> dict | None:
                 "The text may be OCR output, a nutrition table, a menu, a product page excerpt, or user notes. "
                 "Return strict JSON only. Do not invent missing values. Use null for unknown volume, caffeine, or sugar. "
                 "Return one item per beverage product. For each item include: brand, name, type, volume, caffeine, sugar, "
-                "volume_note, raw_evidence, confidence. type must be one of coffee, teacoffee, tea, milktea, fruittea, soda, other. "
                 "For markdown tables, return one item per table row and ignore non-product explanatory rows. "
                 "If the text gives a range such as 150-200mg and also says average/best about 170mg, use 170 as the numeric value. "
                 "If only a range is provided, use the midpoint as the numeric value and preserve the original range in raw_evidence. "
@@ -113,7 +112,6 @@ def _fallback_text_items(text: str) -> list[dict]:
             **extracted,
             "volume_note": _extract_volume_note(chunk),
             "raw_evidence": chunk.strip(),
-            "confidence": 0.58 if _has_minimum_nutrition(extracted) else 0.42,
         }
         items.append(item)
     return _dedupe_text_items(items)
@@ -163,7 +161,6 @@ def _parse_markdown_table_items(text: str) -> list[dict]:
                 "sugar": sugar,
                 "volume_note": "per_serving" if volume else None,
                 "raw_evidence": _clean_markdown_text(" | ".join([name_cell, caffeine_cell, sugar_cell])),
-                "confidence": 0.7,
             })
     return items
 
@@ -216,7 +213,6 @@ def _parse_delimited_table_items(text: str) -> list[dict]:
                 "sugar": sugar,
                 "volume_note": "per_serving" if volume else None,
                 "raw_evidence": _clean_markdown_text(" | ".join([name_cell, caffeine_cell, sugar_cell])),
-                "confidence": 0.72,
             })
     return items
 
@@ -358,7 +354,6 @@ def _dedupe_text_items(items: list[dict]) -> list[dict]:
             if existing.get(field) is None and item.get(field) is not None:
                 existing[field] = item.get(field)
         existing["raw_evidence"] = " ".join(filter(None, [existing.get("raw_evidence"), item.get("raw_evidence")]))
-        existing["confidence"] = max(existing.get("confidence") or 0, item.get("confidence") or 0)
     return list(merged.values())
 
 

@@ -115,7 +115,6 @@ function openExplainability(event, log) {
               >
                 <div class="explain-header">
                   <span>营养估算流程</span>
-                  <strong v-if="log.confidence !== undefined">{{ Math.round(Number(log.confidence) * 100) }}%</strong>
                 </div>
                 <div class="explain-chips">
                   <span v-for="([label, value]) in getMetaItems(log)" :key="label" class="explain-chip">

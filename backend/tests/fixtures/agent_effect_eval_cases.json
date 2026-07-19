@@ -99,13 +99,12 @@
       "volume": 500,
       "caffeine": 126.8,
       "baseSugar": 31,
-      "source": "eval_fixture",
-      "confidence": 0.96
+      "source": "eval_fixture:caffeine_sugar"
     },
     "expected": {
       "intent": "log_drink",
       "final_action": "fill_log_form",
-      "risk_level": "low",
+      "risk_level": "medium",
       "required_tools": ["nutrition_pipeline", "risk_rules", "memory_update"],
       "parsed_fields": {"brand": "瑞幸咖啡", "name": "生椰拿铁", "volume": 500, "sugar": "three"},
       "used_knowledge_match": true,
@@ -142,8 +141,7 @@
       "volume": 500,
       "caffeine": 210,
       "baseSugar": 0,
-      "source": "eval_fixture",
-      "confidence": 0.98
+      "source": "eval_fixture:caffeine_sugar"
     },
     "expected": {
       "intent": "log_drink",

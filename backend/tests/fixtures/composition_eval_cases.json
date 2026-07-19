@@ -14,7 +14,6 @@
       "required_components": ["espresso", "coconut_milk"],
       "caffeine_range": [100, 180],
       "sugar_range": [18, 40],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -33,7 +32,6 @@
       "required_components": ["espresso", "coconut_milk"],
       "caffeine_range": [100, 180],
       "sugar_range": [18, 32],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -52,7 +50,6 @@
       "required_components": ["espresso"],
       "caffeine_range": [100, 180],
       "sugar_range": [0, 2],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -71,7 +68,6 @@
       "required_components": ["espresso", "added_syrup"],
       "caffeine_range": [100, 180],
       "sugar_range": [4, 12],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -90,7 +86,6 @@
       "required_components": ["espresso", "milk"],
       "caffeine_range": [100, 180],
       "sugar_range": [8, 20],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -109,7 +104,6 @@
       "required_components": ["espresso", "oat_milk", "added_syrup"],
       "caffeine_range": [100, 180],
       "sugar_range": [12, 28],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -128,7 +122,6 @@
       "required_components": ["black_or_oolong_tea", "milk", "added_syrup"],
       "caffeine_range": [50, 110],
       "sugar_range": [14, 28],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -147,7 +140,6 @@
       "required_components": ["black_or_oolong_tea", "milk", "added_syrup"],
       "caffeine_range": [50, 110],
       "sugar_range": [28, 45],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -166,7 +158,6 @@
       "required_components": ["light_tea", "fruit_or_juice_base"],
       "caffeine_range": [5, 25],
       "sugar_range": [20, 34],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -185,7 +176,6 @@
       "required_components": ["light_tea", "fruit_or_juice_base", "added_syrup"],
       "caffeine_range": [5, 25],
       "sugar_range": [28, 48],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -204,7 +194,6 @@
       "required_components": ["generic_beverage_base", "added_syrup"],
       "caffeine_range": [0, 5],
       "sugar_range": [12, 28],
-      "min_confidence": 0.4,
       "used_composition": true
     }
   },
@@ -222,7 +211,6 @@
       "required_components": ["espresso", "milk", "added_syrup"],
       "caffeine_range": [100, 180],
       "sugar_range": [14, 28],
-      "min_confidence": 0.6,
       "used_composition": true
     }
   },
@@ -243,16 +231,14 @@
       "volume": 500,
       "caffeine": 120,
       "baseSugar": 20,
-      "source": "eval_fixture",
-      "confidence": 0.96
+      "source": "eval_fixture"
     },
     "expected": {
       "method": "SQL_EXACT_MATCH",
       "drink_type": null,
       "required_components": [],
       "caffeine_range": [115, 125],
-      "sugar_range": [11, 13],
-      "min_confidence": 0.9,
+        "sugar_range": [19, 21],
       "used_composition": false,
       "used_knowledge_match": true
     }

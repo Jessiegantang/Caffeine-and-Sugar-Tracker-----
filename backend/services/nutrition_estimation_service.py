@@ -18,10 +18,8 @@ def estimate_from_parsed_drink(parsed_drink: dict, date: str, db) -> dict:
         "endTime": parsed_drink.get("time") if _is_time(parsed_drink.get("time")) else now_time,
         "caffeine": 0.0,
         "sugarContent": 0.0,
-        "baseSugarDensity": None,
         "status": "draft",
         "data_source": "用户录入",
-        "confidence": parsed_drink.get("confidence") or 0.0,
     }
     return estimate_drink_nutrition(drink, db)
 

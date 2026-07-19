@@ -17,7 +17,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import knowledge.knowledge_lookup as knowledge_lookup
-import knowledge.rag_store as rag_store
 from workflows.nutrition_pipeline import estimate_drink_nutrition
 from db.database import DrinkKnowledge, SessionLocal
 
@@ -25,11 +24,6 @@ from db.database import DrinkKnowledge, SessionLocal
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "composition_eval_cases.json"
 REPORT_PATH = ROOT_DIR / "docs" / "composition_eval_report.md"
-
-
-class DisabledLLM:
-    def with_structured_output(self, *args, **kwargs):
-        raise RuntimeError("LLM disabled for deterministic composition eval report")
 
 
 def load_cases() -> list[dict]:
@@ -76,7 +70,6 @@ def evaluate_case(case: dict) -> dict:
     component_names = {component.get("name") for component in components}
     caffeine = result.get("caffeine")
     sugar = result.get("sugarContent")
-    confidence = result.get("confidence")
 
     checks = [
         result.get("estimation_method") == expected["method"],
@@ -85,7 +78,6 @@ def evaluate_case(case: dict) -> dict:
         all(name in component_names for name in expected.get("required_components", [])),
         expected["caffeine_range"][0] <= caffeine <= expected["caffeine_range"][1],
         expected["sugar_range"][0] <= sugar <= expected["sugar_range"][1],
-        confidence >= expected["min_confidence"],
         isinstance(result.get("reasoning"), list),
         bool(explainability),
     ]
@@ -101,7 +93,6 @@ def evaluate_case(case: dict) -> dict:
         "drink_type": composition.get("drink_type"),
         "caffeine": caffeine,
         "sugarContent": sugar,
-        "confidence": confidence,
         "passed": all(checks),
     }
 
@@ -109,11 +100,7 @@ def evaluate_case(case: dict) -> dict:
 def run_report() -> dict:
     cases = load_cases()
     original_lookup_vectorstore = knowledge_lookup.vectorstore
-    original_rag_retriever = rag_store.retriever
-    original_llm = knowledge_lookup.llm
     knowledge_lookup.vectorstore = None
-    rag_store.retriever = None
-    knowledge_lookup.llm = DisabledLLM()
 
     try:
         rows = [evaluate_case(case) for case in cases]
@@ -124,8 +111,6 @@ def run_report() -> dict:
         finally:
             db.close()
         knowledge_lookup.vectorstore = original_lookup_vectorstore
-        rag_store.retriever = original_rag_retriever
-        knowledge_lookup.llm = original_llm
 
     summary = {
         "total": len(rows),
@@ -148,7 +133,6 @@ def format_table(rows: list[dict]) -> str:
         "drink_type",
         "caffeine",
         "sugar",
-        "confidence",
         "result",
     ]
     table_rows = [
@@ -161,7 +145,6 @@ def format_table(rows: list[dict]) -> str:
             row["drink_type"] or "-",
             str(row["caffeine"]),
             str(row["sugarContent"]),
-            str(row["confidence"]),
             "PASS" if row["passed"] else "FAIL",
         ]
         for row in rows
@@ -210,14 +193,13 @@ def write_markdown_report(report: dict) -> None:
         "",
         "This report is a human-readable snapshot. The unittest suite remains the regression gate.",
         "",
-        "| id | expected | actual | composition | knowledge | drink_type | caffeine | sugar | confidence | result |",
-        "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |",
+        "| id | expected | actual | composition | knowledge | drink_type | caffeine | sugar | result |",
+        "| --- | --- | --- | --- | --- | --- | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
             "| {id} | {expected_method} | {actual_method} | {used_composition} | "
-            "{used_knowledge_match} | {drink_type} | {caffeine} | {sugarContent} | "
-            "{confidence} | {result} |".format(
+            "{used_knowledge_match} | {drink_type} | {caffeine} | {sugarContent} | {result} |".format(
                 **row,
                 drink_type=row["drink_type"] or "-",
                 result="PASS" if row["passed"] else "FAIL",

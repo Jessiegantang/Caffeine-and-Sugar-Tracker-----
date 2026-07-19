@@ -62,7 +62,6 @@ function createInitialForm(date = state.selectedDate) {
     volume: 500,
     startTime,
     endTime,
-    baseSugarOverride: null,
     saveToLibrary: false,
   };
 }
@@ -128,7 +127,6 @@ function populateForm(data) {
   form.type = normalizeType(data.type);
   form.sugar = normalizeSugar(data.sugar);
   form.volume = Number(data.volume || data.defaultVolume || 500);
-  form.baseSugarOverride = data.baseSugarOverride ?? data.baseSugar ?? null;
   highlighted.value = true;
   window.setTimeout(() => {
     highlighted.value = false;
@@ -192,7 +190,6 @@ function handleFormSaved({ date } = {}) {
   <section class="form-section card glass" :class="{ 'form-section-highlight': highlighted }">
     <h3 class="card-title">录入新饮品</h3>
     <form id="drink-form" autocomplete="off" @submit.prevent="submitForm">
-      <input id="input-base-sugar-override" v-model="form.baseSugarOverride" type="hidden">
 
       <div class="form-group">
         <label for="input-date">饮用日期 <span class="required">*</span></label>

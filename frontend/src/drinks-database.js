@@ -36,7 +36,6 @@ function convertListToDict(dbLogs) {
       baseSugar: log.baseSugar,
       defaultVolume: log.volume,
       source: log.source,
-      confidence: log.confidence
     });
   }
   return newDb;
@@ -103,7 +102,6 @@ export async function addDrink(type, drinkData) {
     caffeine: drinkData.caffeine || 0,
     baseSugar: drinkData.baseSugar || 0,
     source: "用户自建知识库",
-    confidence: 0.95
   };
 
   // Optimistic update
@@ -172,7 +170,6 @@ export async function updateDrink(drinkId, drinkData) {
       caffeine: drinkData.caffeine || 0,
       baseSugar: drinkData.baseSugar || 0,
       source: "用户自建知识库",
-      confidence: 0.95
     };
     try {
       await fetch(`${API_BASE}/api/knowledge_base/${drinkId}`, {

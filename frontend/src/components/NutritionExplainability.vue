@@ -36,7 +36,6 @@ const usedComposition = computed(() => Boolean(explainability.value.used_composi
 const usedKnowledge = computed(() => Boolean(explainability.value.used_knowledge_match));
 const sourceLabel = computed(() => mapEstimateSource(result.value, explainability.value, feedback.value));
 const explanation = computed(() => getEstimateExplanation(sourceLabel.value, explainability.value, result.value));
-const confidenceLabel = computed(() => mapConfidenceLevel(result.value?.confidence ?? explainability.value.confidence));
 const typeOptions = Object.entries(TYPE_DEFINITIONS).map(([value, definition]) => ({
   value,
   label: getTypeText(value, definition?.label),
@@ -140,7 +139,6 @@ function buildNutritionResultFromLog(log, notice = '') {
     volume: log.volume,
     caffeine: log.caffeine,
     sugarContent: log.sugarContent,
-    confidence: log.confidence,
     estimation_method: log.estimation_method || '未知',
     data_source: log.data_source || '未知',
     matched_knowledge_id: log.matched_knowledge_id || null,
@@ -153,7 +151,6 @@ function buildNutritionResultFromLog(log, notice = '') {
       used_knowledge_match: Boolean(log.matched_knowledge_id),
       matched_knowledge_id: log.matched_knowledge_id || null,
       retrieval_score: log.retrieval_score ?? null,
-      confidence: log.confidence ?? 0,
       reasoning: normalizeTextList(log.reasoning || ['这条记录没有保存可解释性详情']),
       components: [],
       assumptions: [],
@@ -161,12 +158,6 @@ function buildNutritionResultFromLog(log, notice = '') {
     },
     feedback_notice: notice,
   };
-}
-
-function mapConfidenceLevel(value) {
-  const number = Number(value ?? 0);
-  if (!Number.isFinite(number) || number < 0.55) return '低';
-  return number >= 0.8 ? '高' : '中';
 }
 
 function mapEstimateSource(current, details, currentFeedback) {
@@ -218,7 +209,6 @@ function createTraceEvent(event) {
     input: event.input || null,
     output: event.output || null,
     decision: event.decision || null,
-    confidence: event.confidence,
   };
 }
 
@@ -239,7 +229,7 @@ function getTraceLabel(id = '') {
 function formatTraceKey(key) {
   return ({
     brand: '品牌', name: '名称', type: '类型', volume_ml: '容量', sugar: '甜度', method: '方法',
-    source: '来源', caffeine_mg: '咖啡因', sugar_g: '糖分', confidence: '置信度',
+    source: '来源', caffeine_mg: '咖啡因', sugar_g: '糖分',
     matched_knowledge_id: '知识 ID', retrieval_score: '检索分', components: '成分数', route: '路由',
     drink_type: '饮品类型', espresso_shots: '浓缩份数', tea_base_volume_ml: '茶底',
     milk_volume_ml: '奶基底', fruit_base_volume_ml: '果汁/饮品基底', syrup_pumps: '糖浆泵数',
@@ -258,11 +248,6 @@ function formatTraceValue(value) {
 
 function formatTraceStatus(status) {
   return ({ error: '异常', warning: '有提醒', skipped: '跳过' })[status] || '完成';
-}
-
-function formatConfidence(value) {
-  const number = Number(value ?? 0);
-  return `${Math.round(number * 100)}%`;
 }
 
 function formatNumber(value) {
@@ -290,8 +275,7 @@ function translateNutritionText(value) {
     caffeine_sugar: '咖啡因和糖分', complete: '完整数据', partial: '部分数据', True: '是', False: '否',
     COMPOSITION: '成分估算', LOCAL: '本地估算', LLM: '模型估算', user_feedback: '用户反馈',
     SQL_EXACT_MATCH: '知识库精确匹配', RAG_MATCH: '知识库语义匹配',
-    HYBRID_SQL_EXACT_MATCH_LOCAL: '知识库部分匹配 + 本地估算', LOCAL_ESTIMATOR: '本地兜底估算',
-    LOCAL_ESTIMATION: '本地动态估算', LLM_ESTIMATION: '模型估算', COMPOSITION_ESTIMATION: '成分拆解估算',
+    COMPOSITION_ESTIMATION: '成分拆解估算',
     espresso: '浓缩咖啡', milk: '牛奶', oat_milk: '燕麦奶', coconut_milk: '厚椰乳',
     tea_base: '茶基底', milk_base: '奶基底', fruit_base: '水果/饮品基底', sweetener: '甜味来源',
     none: '无糖', three: '三分糖', half: '半糖', seven: '七分糖', full: '全糖', unknown: '未知',
@@ -315,7 +299,6 @@ function translateNutritionText(value) {
         <div class="estimate-result-summary">
           <div class="nutrition-metric"><span>咖啡因</span><strong>{{ formatNumber(result.caffeine) }} mg</strong></div>
           <div class="nutrition-metric"><span>糖分</span><strong>{{ formatNumber(result.sugarContent) }} g</strong></div>
-          <div class="nutrition-metric"><span>置信度</span><strong>{{ confidenceLabel }}</strong></div>
           <div class="nutrition-metric"><span>来源</span><strong>{{ sourceLabel }}</strong></div>
         </div>
 
@@ -361,7 +344,6 @@ function translateNutritionText(value) {
                       <div><strong>{{ event.label }}</strong><span>{{ translateNutritionText(event.agent) }}</span></div>
                       <div class="agent-trace-badges">
                         <span>{{ translateNutritionText(event.phase) }}</span><span>{{ formatTraceStatus(event.status) }}</span>
-                        <span v-if="event.confidence != null">{{ formatConfidence(event.confidence) }}</span>
                       </div>
                     </div>
                     <p v-if="event.summary">{{ translateNutritionText(event.summary) }}</p>
@@ -393,7 +375,7 @@ function translateNutritionText(value) {
                   <div><strong>{{ translateNutritionText(component.name || '成分') }}</strong><span>{{ translateNutritionText(component.category || '未知类别') }}</span></div>
                   <div>{{ formatAmount(component.amount, component.unit) }}</div>
                   <div>{{ formatNumber(component.caffeine_mg) }}mg</div><div>{{ formatNumber(component.sugar_g) }}g</div>
-                  <div>{{ formatConfidence(component.confidence) }}</div><small>{{ translateNutritionText(component.basis) }}</small>
+                  <small>{{ translateNutritionText(component.basis) }}</small>
                 </div>
               </div>
               <div v-else class="nutrition-empty-note">{{ usedComposition ? '后端没有返回成分明细。' : '未使用成分拆解，因为已有可信知识库匹配。' }}</div>

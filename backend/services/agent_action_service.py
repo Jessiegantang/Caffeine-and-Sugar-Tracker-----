@@ -17,7 +17,6 @@ def parse_intake(db, input_data) -> dict:
         "retrieved_docs": [],
         "model_name": "local",
         "latency_ms": 0.0,
-        "confidence": parsed.get("confidence"),
         "final_action": "parse_intake",
         "error": None,
     }

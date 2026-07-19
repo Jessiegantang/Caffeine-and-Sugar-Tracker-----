@@ -122,7 +122,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                 "volume": 500,
                 "caffeine": 88,
                 "sugar": 12,
-                "confidence": 0.72,
                 "raw_evidence": "Test Image Latte 500ml caffeine 88mg sugar 12g",
             }],
         })
@@ -142,7 +141,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
             "volume": None,
             "caffeine": "100 - 180 mg",
             "sugar": "10 - 15 g",
-            "confidence": 0.72,
         }], context_text="\u56fe\u4e2d\u996e\u54c1\u90fd\u662f\u5e93\u8fea\u5496\u5561\uff0c\u7ea6 450ml")
 
         self.assertEqual(len(items), 1)
@@ -177,7 +175,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
             "type": "soda",
             "caffeine": "< 10 (\u53ef\u53ef\u5fae\u91cf)",
             "sugar": "30+ (\u6781\u9ad8)",
-            "confidence": 0.72,
         }])
 
         self.assertEqual(len(items), 1)
@@ -294,7 +291,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                 "volume": None,
                 "caffeine": 150,
                 "sugar": None,
-                "confidence": 0.7,
                 "raw_evidence": "Test Caffeine Only Americano caffeine 150mg",
             }],
         })
@@ -322,7 +318,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                 "volume": 500,
                 "caffeine": None,
                 "sugar": 16,
-                "confidence": 0.7,
                 "raw_evidence": "Test Sugar Only Tea volume 500ml sugar 16g",
             }],
         })
@@ -349,7 +344,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                 "volume": 500,
                 "caffeine": 150,
                 "sugar": None,
-                "confidence": 0.7,
                 "raw_evidence": "Test Merge Drink volume 500ml caffeine 150mg",
             }],
         })
@@ -368,7 +362,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                 "volume": 650,
                 "caffeine": None,
                 "sugar": 26,
-                "confidence": 0.7,
                 "raw_evidence": "Test Merge Drink volume 650ml sugar 26g",
             }],
         })
@@ -394,7 +387,6 @@ class KnowledgeAcquisitionAgentTests(unittest.TestCase):
                 "volume": 500,
                 "caffeine": 88,
                 "sugar": 12,
-                "confidence": 0.72,
                 "raw_evidence": "Test Image Latte bulk delete 500ml caffeine 88mg sugar 12g",
             }],
         })

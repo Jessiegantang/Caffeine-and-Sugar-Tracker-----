@@ -148,7 +148,6 @@ def send_chat_message(db, input_data) -> dict:
         "retrieved_docs": [],
         "model_name": "dify" if provider == "dify" else ("local" if parsed_intake else None),
         "latency_ms": 0.0,
-        "confidence": parsed_intake.get("confidence") if parsed_intake else None,
         "memory_updates": memory_updates,
         "final_action": "ask_follow_up" if parsed_intake and parsed_intake.get("missing_fields") else ("fill_log_form" if parsed_intake else "answer_advice"),
         "error": fallback_reason,

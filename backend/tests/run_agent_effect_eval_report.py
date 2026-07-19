@@ -327,7 +327,6 @@ def _seed_prior_logs(db, case: dict) -> None:
             "endTime": "09:10",
             "status": "active",
             "data_source": "eval_fixture",
-            "confidence": 1.0,
             **payload,
         }
         db.add(DrinkLog(**row))

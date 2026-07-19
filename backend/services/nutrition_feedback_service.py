@@ -137,7 +137,6 @@ def submit_nutrition_feedback(db: Session, log_id: str, input_data) -> Dict[str,
                 "source_snippet": input_data.source_note,
                 "discovery_method": "user_feedback",
                 "status": "pending_review",
-                "confidence": 0.6,
             })
         evidence = add_nutrition_evidence(db, candidate.id, {
             "source_type": "user_feedback",

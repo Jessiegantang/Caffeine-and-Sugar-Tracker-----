@@ -55,7 +55,6 @@ class DifyFirstChatRouterTests(unittest.TestCase):
                 "volume": 500,
                 "sugar": "three",
                 "time": "now",
-                "confidence": 0.9,
                 "missing_fields": [],
                 "follow_up": None,
             },

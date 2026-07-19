@@ -7,7 +7,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import knowledge.knowledge_lookup as knowledge_lookup
-import knowledge.rag_store as rag_store
 from workflows.nutrition_pipeline import estimate_drink_nutrition
 from db.database import DrinkKnowledge, SessionLocal
 
@@ -15,28 +14,17 @@ from db.database import DrinkKnowledge, SessionLocal
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "composition_eval_cases.json"
 
 
-class DisabledLLM:
-    def with_structured_output(self, *args, **kwargs):
-        raise RuntimeError("LLM disabled for deterministic composition eval")
-
-
 class CompositionEvalTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.original_lookup_vectorstore = knowledge_lookup.vectorstore
-        cls.original_rag_retriever = rag_store.retriever
-        cls.original_llm = knowledge_lookup.llm
         knowledge_lookup.vectorstore = None
-        rag_store.retriever = None
-        knowledge_lookup.llm = DisabledLLM()
         with FIXTURE_PATH.open("r", encoding="utf-8") as f:
             cls.cases = json.load(f)
 
     @classmethod
     def tearDownClass(cls):
         knowledge_lookup.vectorstore = cls.original_lookup_vectorstore
-        rag_store.retriever = cls.original_rag_retriever
-        knowledge_lookup.llm = cls.original_llm
 
     def tearDown(self):
         db = SessionLocal()
@@ -88,7 +76,6 @@ class CompositionEvalTests(unittest.TestCase):
                 self.assertLessEqual(result.get("caffeine"), caffeine_max)
                 self.assertGreaterEqual(result.get("sugarContent"), sugar_min)
                 self.assertLessEqual(result.get("sugarContent"), sugar_max)
-                self.assertGreaterEqual(result.get("confidence"), expected["min_confidence"])
                 self.assertIsInstance(result.get("reasoning"), list)
                 self.assertIn("explainability", result)
                 if expected["used_composition"]:

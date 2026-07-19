@@ -27,7 +27,6 @@ def init_knowledge_base():
                     "caffeine": db_kb.caffeine,
                     "baseSugar": db_kb.baseSugar,
                     "source": db_kb.source,
-                    "confidence": db_kb.confidence,
                 })
             print(f"成功同步 {count} 条记录到 ChromaDB。")
             return
@@ -64,7 +63,6 @@ def init_knowledge_base():
                 caffeine=item.get("caffeine_mg", item.get("caffeine", 0.0)),
                 baseSugar=item.get("sugar_g", item.get("baseSugar", 0.0)),
                 source=item.get("source", "系统预设权威数据"),
-                confidence=item.get("confidence", 0.95),
             )
             db.add(db_kb)
 
@@ -75,7 +73,6 @@ def init_knowledge_base():
                 "caffeine": db_kb.caffeine,
                 "baseSugar": db_kb.baseSugar,
                 "source": db_kb.source,
-                "confidence": db_kb.confidence,
             })
 
             added_count += 1

@@ -97,7 +97,6 @@ class MemoryServiceTests(unittest.TestCase):
                 "health_context": "blood_sugar_attention,doctor_advice",
                 "ignored_key": "ignored",
             },
-            confidence=0.86,
             reason="blood sugar context",
         ))
 
@@ -117,10 +116,9 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(updates["health_context"], "blood_sugar_attention,doctor_advice")
         self.assertNotIn("ignored_key", updates)
 
-    def test_low_confidence_llm_memory_is_ignored(self):
+    def test_empty_llm_memory_is_ignored(self):
         fake_llm = FakeMemoryLLM(MemoryExtractionResult(
-            updates={"goal": "reduce_sugar"},
-            confidence=0.3,
+            updates={},
             reason="too vague",
         ))
 

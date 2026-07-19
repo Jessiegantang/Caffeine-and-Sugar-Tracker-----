@@ -10,7 +10,6 @@ test('normalizeDrinkInput trims values and parses numeric fields', () => {
     type: 'coffee',
     sugar: 'half',
     volume: '500',
-    baseSugarOverride: '12.5',
     saveToLibrary: true,
   });
 
@@ -18,7 +17,6 @@ test('normalizeDrinkInput trims values and parses numeric fields', () => {
   assert.equal(value.brand, 'Test Brand');
   assert.equal(value.name, 'Latte');
   assert.equal(value.volume, 500);
-  assert.equal(value.baseSugarOverride, 12.5);
   assert.equal(value.saveToLibrary, true);
 });
 
@@ -30,13 +28,12 @@ test('normalizeDrinkInput reports all required-field errors', () => {
 test('createOptimisticLog creates a stable pending log shape', () => {
   const { value } = normalizeDrinkInput({
     date: '2026-07-17', name: 'Latte', type: 'coffee', sugar: 'none', volume: 350,
-    startTime: '09:00', endTime: '09:30', baseSugarOverride: 4,
+    startTime: '09:00', endTime: '09:30',
   });
   const log = createOptimisticLog(value, { now: 1234, random: 0.5 });
 
   assert.match(log.id, /^log_1234_/);
   assert.equal(log.caffeine, 0);
   assert.equal(log.sugarContent, 0);
-  assert.equal(log.baseSugarDensity, 4);
   assert.equal(log.isCalculating, true);
 });

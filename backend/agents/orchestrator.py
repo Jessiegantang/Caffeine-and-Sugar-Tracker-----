@@ -31,7 +31,6 @@ class DrinkMindAgentState(TypedDict, total=False):
     retrieved_docs: list[str]
     model_name: str
     latency_ms: float
-    confidence: float
     final_action: str
     error: str | None
 
@@ -68,7 +67,6 @@ def _initial_state(user_message: str, date: str, db) -> DrinkMindAgentState:
         "retrieved_docs": [],
         "model_name": os.getenv("MODEL_NAME", "local"),
         "latency_ms": 0.0,
-        "confidence": 0.0,
         "final_action": "",
         "error": None,
     }
@@ -84,7 +82,6 @@ def _parse_intake_node(state: DrinkMindAgentState) -> DrinkMindAgentState:
 
 def _log_follow_up_node(state: DrinkMindAgentState) -> DrinkMindAgentState:
     parsed = state["parsed_drink"]
-    state["confidence"] = parsed.get("confidence") or 0.0
     state["actions"].append("ask_follow_up")
     state["final_action"] = "ask_follow_up"
     state["final_response"] = parsed.get("follow_up") or "\u6211\u8fd8\u9700\u8981\u4e00\u70b9\u4fe1\u606f\uff0c\u624d\u80fd\u5e2e\u4f60\u8bb0\u5f55\u8fd9\u676f\u996e\u54c1\u3002"
@@ -111,7 +108,6 @@ def _nutrition_log_node(state: DrinkMindAgentState) -> DrinkMindAgentState:
     state["nutrition_result"] = nutrition
     state["risk_result"] = evaluate_daily_risk(state["date"], state["db"], nutrition)
     state["memory_updates"] = extract_memory_updates(state["user_message"], "log_drink", parsed, state["db"])
-    state["confidence"] = nutrition.get("confidence") or parsed.get("confidence") or 0.0
     state["actions"].extend(["parse_intake", "estimate_nutrition", "fill_log_form"])
     state["final_action"] = "fill_log_form"
     state["final_response"] = _format_log_drink_response(parsed, nutrition, state["risk_result"])

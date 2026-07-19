@@ -38,7 +38,6 @@ def nutrition_result_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     keys = [
         "caffeine",
         "sugarContent",
-        "confidence",
         "estimation_method",
         "data_source",
         "matched_knowledge_id",

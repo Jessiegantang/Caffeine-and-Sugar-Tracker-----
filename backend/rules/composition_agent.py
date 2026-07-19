@@ -63,7 +63,6 @@ def decompose_drink(drink: dict) -> dict:
         "assumptions": assumptions,
         "warnings": warnings,
         "uncertainty_drivers": uncertainty_drivers,
-        "confidence": 0.75,
         "input": {
             "brand": brand,
             "name": name,
@@ -76,11 +75,9 @@ def decompose_drink(drink: dict) -> dict:
     if sugar_level == "unknown":
         warnings.append("Sweetness level is unknown; using half-sugar added sweetener assumption.")
         uncertainty_drivers.append("Sweetness level is unknown, so added syrup is estimated from a half-sugar assumption.")
-        composition["confidence"] -= 0.12
     if any(token in text for token in ["超燃", "能量", "energy"]):
         warnings.append("Functional or energy-style naming detected; extra caffeine sources are not modeled without product evidence.")
         uncertainty_drivers.append("Functional drink naming may imply extra active ingredients, but no verified product evidence was available.")
-        composition["confidence"] -= 0.08
 
     if drink_type == "coconut_americano":
         shots = _coffee_shots(volume, style="americano")
@@ -195,14 +192,12 @@ def decompose_drink(drink: dict) -> dict:
             "syrup_pumps": _syrup_pumps(volume, "unknown", sugar_level),
             "fruit_base": "generic_beverage_base",
             "fruit_base_volume_ml": round(volume * 0.35, 1),
-            "confidence": min(composition["confidence"], 0.45),
         })
         natural_sources.append("generic_beverage_base")
         warnings.append("Unknown drink style; using conservative generic beverage assumptions.")
         assumptions.append("Fallback composition uses a small generic sugar-containing base plus optional sweetener.")
         uncertainty_drivers.append("Drink style is unknown, so both composition and sugar density use broad generic assumptions.")
 
-    composition["confidence"] = _clamp_confidence(composition["confidence"])
     return composition
 
 
@@ -231,7 +226,6 @@ def estimate_from_composition(composition: dict) -> dict:
                 f"{ESPRESSO_CAFFEINE_MG_PER_SHOT['max']:g}mg caffeine per espresso shot, "
                 f"best {ESPRESSO_CAFFEINE_MG_PER_SHOT['best']:g}mg"
             ),
-            confidence=0.82,
         ))
         reasoning.append(
             f"Estimated espresso caffeine range from {shots:g} shot(s): "
@@ -257,7 +251,6 @@ def estimate_from_composition(composition: dict) -> dict:
                 f"{density['min']:g}-{density['max']:g}mg caffeine per 100ml tea base, "
                 f"best {density['best']:g}mg"
             ),
-            confidence=0.68,
         ))
         reasoning.append(
             f"Estimated tea caffeine range from tea base volume: "
@@ -283,7 +276,6 @@ def estimate_from_composition(composition: dict) -> dict:
                 f"{sugar_density['min']:g}-{sugar_density['max']:g}g sugar per 100ml "
                 f"{milk_base or 'milk'}, best {sugar_density['best']:g}g"
             ),
-            confidence=0.72,
         ))
         reasoning.append(
             f"Included natural sugar range from {milk_base or 'milk'}: "
@@ -309,7 +301,6 @@ def estimate_from_composition(composition: dict) -> dict:
                 f"{sugar_density['min']:g}-{sugar_density['max']:g}g sugar per 100ml "
                 f"{_fruit_basis_label(str(fruit_base or 'fruit_base'))}, best {sugar_density['best']:g}g"
             ),
-            confidence=0.62 if composition.get("drink_type") == "unknown" else 0.70,
         ))
         reasoning.append(
             f"Included natural sugar range from fruit or beverage base: "
@@ -335,7 +326,6 @@ def estimate_from_composition(composition: dict) -> dict:
                 f"{SYRUP_SUGAR_G_PER_PUMP['min']:g}-{SYRUP_SUGAR_G_PER_PUMP['max']:g}g sugar per syrup pump "
                 f"adjusted by sweetness level {level}, best {SYRUP_SUGAR_G_PER_PUMP['best']:g}g"
             ),
-            confidence=0.66 if level == "unknown" else 0.74,
         ))
         reasoning.append(
             f"Added sugar range adjusted by sweetness level '{level}': "
@@ -348,8 +338,6 @@ def estimate_from_composition(composition: dict) -> dict:
     sugar_total_range = add_ranges(sugar_ranges, "g")
     caffeine_total = caffeine_total_range["best"]
     sugar_total = sugar_total_range["best"]
-    component_confidence = _average([item["confidence"] for item in components], default=0.5)
-    confidence = min(float(composition.get("confidence") or 0.5), component_confidence)
 
     if composition.get("warnings"):
         reasoning.extend([f"Warning: {warning}" for warning in composition["warnings"]])
@@ -361,10 +349,7 @@ def estimate_from_composition(composition: dict) -> dict:
         "sugar_range": sugar_total_range,
         "components": components,
         "reasoning": reasoning,
-        "confidence": _clamp_confidence(confidence),
     }
-
-
 def estimate_composition_nutrition(drink: dict) -> dict:
     """Public API for composition-based nutrition estimation."""
     composition = decompose_drink(drink)
@@ -380,7 +365,6 @@ def estimate_composition_nutrition(drink: dict) -> dict:
         "caffeine_range": estimate["caffeine_range"],
         "sugar_range": estimate["sugar_range"],
         "data_source": "Composition Estimation Agent",
-        "confidence": estimate["confidence"],
         "reasoning": estimate["reasoning"],
         "estimation_method": "COMPOSITION_ESTIMATION",
         "matched_knowledge_id": None,
@@ -520,7 +504,6 @@ def _component(
     caffeine_range_mg: RangeEstimate,
     sugar_range_g: RangeEstimate,
     basis: str,
-    confidence: float,
 ) -> dict:
     return {
         "name": name,
@@ -532,13 +515,4 @@ def _component(
         "caffeine_range_mg": caffeine_range_mg,
         "sugar_range_g": sugar_range_g,
         "basis": basis,
-        "confidence": _clamp_confidence(confidence),
     }
-
-
-def _average(values: list[float], default: float) -> float:
-    return sum(values) / len(values) if values else default
-
-
-def _clamp_confidence(value: float) -> float:
-    return round(max(0.1, min(float(value), 0.95)), 2)

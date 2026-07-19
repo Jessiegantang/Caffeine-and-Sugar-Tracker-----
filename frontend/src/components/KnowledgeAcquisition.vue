@@ -46,7 +46,7 @@ function prefill(data) {
 async function createCandidate() {
   if (!candidateForm.name.trim()) return setMessage('请输入候选饮品名称', false);
   try {
-    await createKnowledgeCandidateApi({ ...candidateForm, brand: candidateForm.brand.trim(), name: candidateForm.name.trim(), source_url: candidateForm.source_url.trim() || null, discovery_method: 'manual', confidence: 0.6 });
+    await createKnowledgeCandidateApi({ ...candidateForm, brand: candidateForm.brand.trim(), name: candidateForm.name.trim(), source_url: candidateForm.source_url.trim() || null, discovery_method: 'manual' });
     Object.assign(candidateForm, { brand: '', name: '', type: 'coffee', source_url: '' });
     setMessage('候选已创建', true);
     await loadReviewQueue();

@@ -37,7 +37,6 @@ class FakeStructuredLLM:
             volume=500,
             sugar="half",
             time="now",
-            confidence=0.91,
             missing_fields=[],
             follow_up=None,
         ))
@@ -52,7 +51,6 @@ def incomplete_local_parse():
         "volume": 500,
         "sugar": None,
         "time": "now",
-        "confidence": 0.62,
         "missing_fields": ["sugar"],
         "follow_up": "Which sugar level?",
     }
@@ -145,7 +143,7 @@ class LLMOfflineControlTests(unittest.TestCase):
         self.assertTrue(response)
         self.assertNotIn("LLM companion is disabled", response)
 
-    def test_enrich_no_knowledge_match_is_quiet_and_uses_local_fallback_when_disabled(self):
+    def test_enrich_no_knowledge_match_returns_missing_fields_for_graph(self):
         db = SessionLocal()
         try:
             with patch.dict(os.environ, {
@@ -153,22 +151,22 @@ class LLMOfflineControlTests(unittest.TestCase):
                 "DRINKMIND_OFFLINE": "true",
                 "OPENAI_API_KEY": "real-looking-key",
             }):
-                with patch.object(knowledge_lookup, "llm", RaisingLLM()):
-                    with patch.object(knowledge_lookup, "vectorstore", None):
-                        with patch("builtins.print") as mocked_print:
-                            result = knowledge_lookup.enrich_drink_data({
-                                "brand": "NoKbOfflineBrand",
-                                "name": "Offline Test Latte",
-                                "type": "coffee",
-                                "sugar": "three",
-                                "volume": 500,
-                                "data_source": "user_input",
-                            }, db)
+                with patch.object(knowledge_lookup, "vectorstore", None):
+                    with patch("builtins.print") as mocked_print:
+                        result = knowledge_lookup.enrich_drink_data({
+                            "brand": "NoKbOfflineBrand",
+                            "name": "Offline Test Latte",
+                            "type": "coffee",
+                            "sugar": "three",
+                            "volume": 500,
+                            "data_source": "user_input",
+                        }, db)
         finally:
             db.close()
 
-        self.assertEqual(result["estimation_method"], "LOCAL_ESTIMATOR")
-        self.assertGreaterEqual(result["caffeine"], 0)
+        self.assertEqual(result["estimation_method"], "NO_KNOWLEDGE_MATCH")
+        self.assertIsNone(result["caffeine"])
+        self.assertIsNone(result["sugarContent"])
         printed = "\n".join(str(call.args[0]) for call in mocked_print.call_args_list if call.args)
         self.assertNotIn("AI Estimation Error", printed)
         self.assertNotIn("tool_choice", printed)
@@ -181,16 +179,15 @@ class LLMOfflineControlTests(unittest.TestCase):
                 "DRINKMIND_OFFLINE": "true",
                 "OPENAI_API_KEY": "real-looking-key",
             }):
-                with patch.object(knowledge_lookup, "llm", RaisingLLM()):
-                    with patch.object(knowledge_lookup, "vectorstore", None):
-                        result = estimate_drink_nutrition({
-                            "brand": "NoKbCompositionOfflineBrand",
-                            "name": "coconut latte",
-                            "type": "coffee",
-                            "sugar": "three",
-                            "volume": 500,
-                            "data_source": "user_input",
-                        }, db)
+                with patch.object(knowledge_lookup, "vectorstore", None):
+                    result = estimate_drink_nutrition({
+                        "brand": "NoKbCompositionOfflineBrand",
+                        "name": "coconut latte",
+                        "type": "coffee",
+                        "sugar": "three",
+                        "volume": 500,
+                        "data_source": "user_input",
+                    }, db)
         finally:
             db.close()
 

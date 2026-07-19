@@ -15,7 +15,6 @@ class IntakeParseResult(BaseModel):
     volume: int | None = Field(default=None, description="Volume in ml.")
     sugar: str | None = Field(default=None, description="Sugar level: none, three, half, seven, full, unknown.")
     time: str | None = Field(default=None, description="Drink time, now or HH:MM.")
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     missing_fields: List[str] = Field(default_factory=list)
     follow_up: str | None = Field(default=None, description="Question to ask when fields are missing.")
 
@@ -275,12 +274,9 @@ def _parse_intake_locally(user_message: str) -> dict:
         "volume": _infer_volume(text) if intent == "log_drink" else None,
         "sugar": _infer_sugar(text) if intent == "log_drink" else None,
         "time": _infer_time(text) if intent == "log_drink" else None,
-        "confidence": 0.72 if intent == "log_drink" else 0.55,
     }
     result["missing_fields"] = _build_missing_fields(result) if intent == "log_drink" else []
     result["follow_up"] = _build_follow_up(result["missing_fields"])
-    if result["missing_fields"]:
-        result["confidence"] = min(result["confidence"], 0.62)
     return result
 
 
@@ -313,8 +309,6 @@ def parse_intake_message(user_message: str) -> dict:
         result["intent"] = result.get("intent") or "log_drink"
         result["missing_fields"] = _build_missing_fields(result)
         result["follow_up"] = _build_follow_up(result["missing_fields"])
-        if result["missing_fields"]:
-            result["confidence"] = min(float(result.get("confidence") or 0.7), 0.68)
         return result
     except Exception as e:
         print(f"[Intake Parser] Falling back to local parser: {e}", flush=True)

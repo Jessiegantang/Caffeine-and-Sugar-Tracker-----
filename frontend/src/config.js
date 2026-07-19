@@ -7,7 +7,7 @@
 // pipeline is the single source of truth for those estimates.
 export const PRESET_TEMPLATES = {
   'luckin-americano': { brand: '瑞幸咖啡', name: '冰美式', type: 'coffee', sugar: 'none', volume: 650 },
-  'luckin-coconut-americano': { brand: '瑞幸咖啡', name: '椰青美式', type: 'coffee', sugar: 'none', volume: 500, baseSugarOverride: 2.2 },
+  'luckin-coconut-americano': { brand: '瑞幸咖啡', name: '椰青美式', type: 'coffee', sugar: 'none', volume: 500 },
   'luckin-latte': { brand: '瑞幸咖啡', name: '生椰拿铁', type: 'coffee', sugar: 'half', volume: 500 },
   'cotti-coco': { brand: '库迪咖啡', name: '生椰拿铁', type: 'coffee', sugar: 'half', volume: 600 },
   'milktea-standard': { brand: '通用', name: '珍珠奶茶', type: 'milktea', sugar: 'full', volume: 500 },

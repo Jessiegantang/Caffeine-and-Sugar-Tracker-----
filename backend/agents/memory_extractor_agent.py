@@ -27,7 +27,6 @@ ALLOWED_HEALTH_CONTEXTS = {
 
 class MemoryExtractionResult(BaseModel):
     updates: dict = Field(default_factory=dict, description="Memory updates inferred from the message.")
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     reason: str | None = Field(default=None, description="Short reason for the inferred memory updates.")
 
 
@@ -58,8 +57,6 @@ def infer_memory_updates_with_llm(user_message: str, local_updates: dict | None 
             "local_updates": json.dumps(local_updates or {}, ensure_ascii=False),
         })
         data = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed.dict()
-        if float(data.get("confidence") or 0.0) < 0.7:
-            return {}
         return _sanitize_llm_updates(data.get("updates") or {})
     except Exception as e:
         print(f"[Memory Extractor] Falling back to local memory rules: {e}", flush=True)

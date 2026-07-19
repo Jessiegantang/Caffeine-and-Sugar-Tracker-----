@@ -12,10 +12,8 @@ use_chroma = os.getenv("CHROMA_PERSIST_DIR") is not None or not env_truthy("DRIN
 
 if use_chroma and os.path.exists(chroma_path):
     vectorstore = Chroma(persist_directory=chroma_path, embedding_function=embeddings)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
 else:
     vectorstore = None
-    retriever = None
 
 
 def sync_chroma_document(kb_id, data: dict):
@@ -38,7 +36,6 @@ def sync_chroma_document(kb_id, data: dict):
             "caffeine": data.get("caffeine", 0),
             "sugar": data.get("baseSugar", 0),
             "source": data.get("source", "知识库"),
-            "confidence": data.get("confidence", 0.9),
         },
     )
     vectorstore.add_documents([doc], ids=[kb_id])

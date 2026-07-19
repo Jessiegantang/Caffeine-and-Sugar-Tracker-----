@@ -45,10 +45,6 @@ function value(value, unit) {
   return value == null ? '未知' : `${value}${unit}`;
 }
 
-function confidence(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? `${Math.round(number * 100)}%` : '-';
-}
 </script>
 
 <template>
@@ -61,11 +57,11 @@ function confidence(value) {
     <div v-else-if="!candidateRows.length && !orphanEvidence.length" class="acquisition-empty">暂无待审核内容</div>
     <div v-else class="acquisition-list acquisition-review-list">
       <div v-for="row in candidateRows" :key="row.candidate.id" class="acquisition-review-group">
-        <div class="acquisition-review-head"><input v-model="selectedCandidates" type="checkbox" :value="row.candidate.id" aria-label="选择候选"><div><div class="acquisition-title">{{ row.candidate.brand || '-' }} {{ row.candidate.name }}</div><div class="acquisition-meta">{{ typeLabel(row.candidate.type) }} · {{ statusLabel(row.candidate.status) }} · {{ row.evidence.length }} 条证据 · 置信度 {{ confidence(row.candidate.confidence) }}</div></div><div class="acquisition-actions"><button type="button" class="mini-danger-btn" @click="emit('delete-candidate', row.candidate.id)">删除候选</button></div></div>
+        <div class="acquisition-review-head"><input v-model="selectedCandidates" type="checkbox" :value="row.candidate.id" aria-label="选择候选"><div><div class="acquisition-title">{{ row.candidate.brand || '-' }} {{ row.candidate.name }}</div><div class="acquisition-meta">{{ typeLabel(row.candidate.type) }} · {{ statusLabel(row.candidate.status) }} · {{ row.evidence.length }} 条证据</div></div><div class="acquisition-actions"><button type="button" class="mini-danger-btn" @click="emit('delete-candidate', row.candidate.id)">删除候选</button></div></div>
         <div v-if="!row.evidence.length" class="acquisition-empty inline-empty">还没有证据，可以在上方添加证据文本。</div>
         <div v-for="group in sourceGroups(row.evidence)" v-else :key="group.key" class="acquisition-source-group">
           <div class="acquisition-source-head"><input type="checkbox" :checked="groupChecked(group.rows)" @change="selectGroup(group.rows, $event.target.checked)"><div><div class="acquisition-title">{{ sourceLabel(group.source_type) }}</div><div class="acquisition-meta">{{ group.source_url || '无来源链接' }} · {{ group.rows.length }} 条</div></div><div class="acquisition-actions"><button type="button" class="btn btn-primary" @click="emit('approve-many', group.rows.map(item => item.id))">整组入库</button><button type="button" class="mini-danger-btn" @click="emit('delete-evidence-many', group.rows.map(item => item.id))">删除组</button></div></div>
-          <div class="acquisition-evidence-stack"><div v-for="item in group.rows" :key="item.id" class="acquisition-item acquisition-evidence-item"><input v-model="selectedEvidence" type="checkbox" :value="item.id"><div><div class="acquisition-title">{{ sourceLabel(item.source_type) }} · {{ statusLabel(item.status) }}</div><div class="acquisition-meta">{{ item.extracted?.volume || '-' }}ml · 咖啡因 {{ value(item.extracted?.caffeine, 'mg') }} · 糖分 {{ value(item.extracted?.sugar, 'g') }} · 置信度 {{ confidence(item.confidence) }}</div></div><div class="acquisition-actions"><button type="button" class="btn btn-primary" @click="emit('approve', item.id)">入库</button><button type="button" class="mini-danger-btn" @click="emit('delete-evidence', item.id)">删除</button></div></div></div>
+          <div class="acquisition-evidence-stack"><div v-for="item in group.rows" :key="item.id" class="acquisition-item acquisition-evidence-item"><input v-model="selectedEvidence" type="checkbox" :value="item.id"><div><div class="acquisition-title">{{ sourceLabel(item.source_type) }} · {{ statusLabel(item.status) }}</div><div class="acquisition-meta">{{ item.extracted?.volume || '-' }}ml · 咖啡因 {{ value(item.extracted?.caffeine, 'mg') }} · 糖分 {{ value(item.extracted?.sugar, 'g') }}</div></div><div class="acquisition-actions"><button type="button" class="btn btn-primary" @click="emit('approve', item.id)">入库</button><button type="button" class="mini-danger-btn" @click="emit('delete-evidence', item.id)">删除</button></div></div></div>
         </div>
       </div>
       <div v-if="orphanEvidence.length" class="acquisition-review-group"><div class="acquisition-title">未匹配证据</div><div class="acquisition-evidence-stack"><div v-for="item in orphanEvidence" :key="item.id" class="acquisition-item acquisition-evidence-item"><input v-model="selectedEvidence" type="checkbox" :value="item.id"><div><div class="acquisition-title">{{ sourceLabel(item.source_type) }}</div><div class="acquisition-meta">咖啡因 {{ value(item.extracted?.caffeine, 'mg') }} · 糖分 {{ value(item.extracted?.sugar, 'g') }}</div></div><div class="acquisition-actions"><button type="button" class="btn btn-primary" @click="emit('approve', item.id)">入库</button><button type="button" class="mini-danger-btn" @click="emit('delete-evidence', item.id)">删除</button></div></div></div></div>

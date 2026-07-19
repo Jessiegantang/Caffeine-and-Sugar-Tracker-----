@@ -1,6 +1,5 @@
 export function normalizeDrinkInput(formData = {}) {
   const volume = Number.parseInt(formData.volume, 10);
-  const parsedSugarOverride = Number.parseFloat(formData.baseSugarOverride);
   const value = {
     date: String(formData.date || ''),
     brand: String(formData.brand || '').trim(),
@@ -10,7 +9,6 @@ export function normalizeDrinkInput(formData = {}) {
     volume,
     startTime: String(formData.startTime || ''),
     endTime: String(formData.endTime || ''),
-    baseSugarOverride: Number.isFinite(parsedSugarOverride) ? parsedSugarOverride : null,
     saveToLibrary: Boolean(formData.saveToLibrary),
   };
 
@@ -42,6 +40,5 @@ export function createOptimisticLog(input, options = {}) {
     caffeine: 0,
     sugarContent: 0,
     isCalculating: true,
-    baseSugarDensity: input.baseSugarOverride ?? 0,
   };
 }

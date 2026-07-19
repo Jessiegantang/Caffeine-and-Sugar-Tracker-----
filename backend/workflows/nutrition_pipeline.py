@@ -20,7 +20,6 @@ from rules.llm_composition_decomposer import (
 
 
 KNOWLEDGE_METHODS_TO_KEEP = {"SQL_EXACT_MATCH", "RAG_MATCH"}
-FALLBACK_METHODS_TO_REPLACE = {"LLM_ESTIMATION", "LOCAL_ESTIMATOR"}
 
 
 class NutritionEstimationState(TypedDict, total=False):
@@ -69,7 +68,6 @@ def _lookup_knowledge_node(state: NutritionEstimationState) -> NutritionEstimati
     state["knowledge_result"] = enrich_drink_data(
         dict(state["normalized_drink"]),
         state["db"],
-        allow_llm_fallback=False,
     )
     _trace(
         state,
@@ -79,7 +77,6 @@ def _lookup_knowledge_node(state: NutritionEstimationState) -> NutritionEstimati
         summary="查询精确知识库和 RAG 候选，得到可复用的营养估算结果。",
         input=_drink_summary(state.get("normalized_drink") or {}),
         output=_result_summary(state["knowledge_result"]),
-        confidence=state["knowledge_result"].get("confidence"),
     )
     return state
 
@@ -95,7 +92,6 @@ def _route_estimation_node(state: NutritionEstimationState) -> NutritionEstimati
         input=_result_summary(state.get("knowledge_result") or {}),
         output={"route": state["route"]},
         decision="进入成分估算" if state["route"] == "composition" else "采用知识库结果",
-        confidence=(state.get("knowledge_result") or {}).get("confidence"),
     )
     return state
 
@@ -111,7 +107,6 @@ def _use_knowledge_result_node(state: NutritionEstimationState) -> NutritionEsti
         summary="知识库匹配足够可信，直接采用该结果作为最终营养估算基础。",
         input=_result_summary(state.get("knowledge_result") or {}),
         output=_result_summary(state["selected_result"]),
-        confidence=state["selected_result"].get("confidence"),
     )
     return state
 
@@ -135,7 +130,6 @@ def _composition_decompose_node(state: NutritionEstimationState) -> NutritionEst
             summary="LLM 成分拆解不可用时，使用本地名称和类型规则生成兜底成分结构。",
             input=_drink_summary(state.get("normalized_drink") or {}),
             output=_composition_summary(state["composition"]),
-            confidence=state["composition"].get("confidence"),
         )
     except Exception as e:
         _handle_composition_error(state, e)
@@ -170,7 +164,6 @@ def _llm_composition_decompose_node(state: NutritionEstimationState) -> Nutritio
             input=_drink_summary(state.get("normalized_drink") or {}),
             output=_composition_summary(state["composition"]),
             decision="采用 LLM 成分结构",
-            confidence=state["composition"].get("confidence"),
         )
     except Exception as e:
         state["composition"] = None
@@ -204,14 +197,13 @@ def _composition_estimate_node(state: NutritionEstimationState) -> NutritionEsti
             "caffeine": estimate["caffeine"],
             "sugarContent": estimate["sugarContent"],
             "data_source": "Composition Estimation Agent",
-            "confidence": estimate["confidence"],
             "reasoning": estimate["reasoning"],
             "estimation_method": "COMPOSITION_ESTIMATION",
             "matched_knowledge_id": None,
             "retrieval_score": None,
             "composition": composition_with_components,
         }
-        state["selected_result"] = _merge_drink_context(
+        state["selected_result"] = _merge_knowledge_and_composition(
             state["knowledge_result"],
             state["composition_result"],
             state["normalized_drink"],
@@ -225,7 +217,6 @@ def _composition_estimate_node(state: NutritionEstimationState) -> NutritionEsti
             summary="按成分范围累计咖啡因和糖分，并给出当前最可能估算值。",
             input=_composition_summary(state.get("composition") or {}),
             output=_result_summary(state["composition_result"]),
-            confidence=state["composition_result"].get("confidence"),
         )
     except Exception as e:
         _handle_composition_error(state, e)
@@ -253,7 +244,7 @@ def _verify_result_node(state: NutritionEstimationState) -> NutritionEstimationS
     components = ((result.get("composition") or {}).get("components") or [])
     if state.get("route") == "composition" and not components:
         warnings.append("composition route produced no components")
-    if used_composition and method != "COMPOSITION_ESTIMATION":
+    if used_composition and method != "COMPOSITION_ESTIMATION" and not str(method or "").startswith("HYBRID_"):
         warnings.append("composition route selected a non-composition method")
     if not used_composition and method == "COMPOSITION_ESTIMATION":
         warnings.append("knowledge route selected a composition method")
@@ -298,7 +289,6 @@ def _build_explainability_node(state: NutritionEstimationState) -> NutritionEsti
         summary="组装前端展示所需的解释性字段、证据和流程 trace。",
         input=_result_summary(result),
         output=_result_summary(normalized),
-        confidence=normalized.get("confidence"),
     )
     explainability["graph_trace"] = list(state.get("graph_trace") or [])
     return state
@@ -347,7 +337,6 @@ def _trace(
     input: dict | None = None,
     output: dict | None = None,
     decision: str | None = None,
-    confidence: Any = None,
     status: str = "completed",
 ) -> None:
     event = {
@@ -364,8 +353,6 @@ def _trace(
         event["output"] = output
     if decision:
         event["decision"] = decision
-    if confidence is not None:
-        event["confidence"] = _clamp_confidence(confidence)
     state.setdefault("graph_trace", []).append(event)
 
 
@@ -399,9 +386,9 @@ def _result_summary(result: dict) -> dict:
         "source": result.get("data_source"),
         "caffeine_mg": result.get("caffeine"),
         "sugar_g": result.get("sugarContent"),
-        "confidence": result.get("confidence"),
         "matched_knowledge_id": result.get("matched_knowledge_id"),
         "retrieval_score": result.get("retrieval_score"),
+        "knowledge_fields": result.get("knowledge_fields"),
         "components": len((result.get("composition") or {}).get("components") or []),
     })
 
@@ -417,7 +404,6 @@ def _composition_summary(composition: dict) -> dict:
         "sweetness_level": composition.get("sweetness_level"),
         "decomposition_source": composition.get("decomposition_source"),
         "llm_decomposition_used": composition.get("llm_decomposition_used"),
-        "confidence": composition.get("confidence"),
         "assumptions": composition.get("assumptions"),
         "warnings": composition.get("warnings"),
     })
@@ -479,14 +465,35 @@ def _build_graph():
 
 
 def _should_use_composition(enriched: dict) -> bool:
-    method = enriched.get("estimation_method")
-    if method in KNOWLEDGE_METHODS_TO_KEEP:
-        return False
-    if method in FALLBACK_METHODS_TO_REPLACE:
-        return True
-    if not enriched.get("matched_knowledge_id") and float(enriched.get("confidence") or 0.0) < 0.7:
-        return True
-    return False
+    """Route solely by whether caffeine and sugar are both present."""
+    fields = enriched.get("knowledge_fields") or {}
+    if fields:
+        return not (bool(fields.get("caffeine")) and bool(fields.get("sugar")))
+    # Backward-compatible handling for mocked/legacy complete knowledge results.
+    return enriched.get("estimation_method") not in KNOWLEDGE_METHODS_TO_KEEP
+
+
+def _merge_knowledge_and_composition(knowledge: dict, composition: dict, original: dict) -> dict:
+    """Use DB/RAG for known fields and Agent output only for missing fields."""
+    fields = knowledge.get("knowledge_fields") or {}
+    caffeine_known = bool(fields.get("caffeine"))
+    sugar_known = bool(fields.get("sugar"))
+    used_knowledge = caffeine_known or sugar_known
+
+    merged = _merge_drink_context(knowledge, composition, original)
+    if caffeine_known:
+        merged["caffeine"] = knowledge.get("caffeine")
+    if sugar_known:
+        merged["sugarContent"] = knowledge.get("sugarContent")
+
+    if used_knowledge:
+        knowledge_method = knowledge.get("estimation_method") or "KNOWLEDGE"
+        merged["estimation_method"] = f"HYBRID_{knowledge_method}_COMPOSITION"
+        merged["data_source"] = f"{knowledge.get('data_source') or knowledge_method} + Composition Estimation Agent"
+        merged["matched_knowledge_id"] = knowledge.get("matched_knowledge_id")
+        merged["retrieval_score"] = knowledge.get("retrieval_score")
+        merged["reasoning"] = list(knowledge.get("reasoning") or []) + list(composition.get("reasoning") or [])
+    return merged
 
 
 def _merge_drink_context(enriched: dict, nutrition: dict, original: dict) -> dict:
@@ -502,7 +509,6 @@ def _merge_drink_context(enriched: dict, nutrition: dict, original: dict) -> dic
         "startTime",
         "endTime",
         "status",
-        "baseSugarDensity",
         "agent_trace_id",
     ]:
         if key in enriched or key in original:
@@ -515,7 +521,6 @@ def _normalize_result(result: dict, *, used_composition: bool) -> dict:
     normalized["caffeine"] = round(float(normalized.get("caffeine") or 0.0), 1)
     normalized["sugarContent"] = round(float(normalized.get("sugarContent") or 0.0), 1)
     normalized["data_source"] = normalized.get("data_source") or "Unknown"
-    normalized["confidence"] = _clamp_confidence(normalized.get("confidence"))
     normalized["reasoning"] = _normalize_reasoning(normalized.get("reasoning"))
     normalized["estimation_method"] = normalized.get("estimation_method") or "UNKNOWN_ESTIMATION"
     normalized["matched_knowledge_id"] = normalized.get("matched_knowledge_id")
@@ -533,6 +538,7 @@ def _build_explainability(result: dict, *, used_composition: bool) -> dict:
     method = result.get("estimation_method") or "UNKNOWN_ESTIMATION"
     matched_id = result.get("matched_knowledge_id")
     used_knowledge_match = bool(matched_id) or method in KNOWLEDGE_METHODS_TO_KEEP
+    knowledge_fields = result.get("knowledge_fields") or {}
 
     return {
         "method": method,
@@ -540,7 +546,11 @@ def _build_explainability(result: dict, *, used_composition: bool) -> dict:
         "used_knowledge_match": used_knowledge_match,
         "matched_knowledge_id": matched_id,
         "retrieval_score": result.get("retrieval_score"),
-        "confidence": result.get("confidence"),
+        "knowledge_fields": knowledge_fields,
+        "field_sources": {
+            "caffeine": "knowledge" if knowledge_fields.get("caffeine") else "composition",
+            "sugar": "knowledge" if knowledge_fields.get("sugar") else "composition",
+        },
         "reasoning": result.get("reasoning") or [],
         "components": components,
         "assumptions": assumptions,
@@ -562,14 +572,6 @@ def _stringify_reason(value: Any) -> str:
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
-
-
-def _clamp_confidence(value: Any) -> float:
-    try:
-        confidence = float(value)
-    except (TypeError, ValueError):
-        confidence = 0.0
-    return round(max(0.0, min(confidence, 1.0)), 2)
 
 
 def _safe_float(value: Any) -> float:

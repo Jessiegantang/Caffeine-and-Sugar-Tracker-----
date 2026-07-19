@@ -51,7 +51,6 @@ def create_manual_candidate(db, payload: dict) -> ProductCandidate:
         source_snippet=payload.get("source_snippet"),
         discovery_method=payload.get("discovery_method") or "manual",
         status=payload.get("status") or "pending_review",
-        confidence=float(payload.get("confidence") or 0.6),
         updated_at=datetime.datetime.now().isoformat(),
     )
     db.add(candidate)
@@ -67,7 +66,6 @@ def add_nutrition_evidence(db, candidate_id: str, payload: dict) -> NutritionEvi
 
     raw_text = payload.get("raw_evidence") or ""
     extracted = extract_nutrition_fields(raw_text)
-    confidence = score_evidence(payload.get("source_type") or "manual", extracted, raw_text)
     evidence = NutritionEvidence(
         id=payload.get("id") or f"ev_{uuid.uuid4().hex[:10]}",
         candidate_id=candidate_id,
@@ -75,7 +73,6 @@ def add_nutrition_evidence(db, candidate_id: str, payload: dict) -> NutritionEvi
         source_type=payload.get("source_type") or "manual",
         raw_evidence=raw_text,
         extracted_json=json.dumps(extracted, ensure_ascii=False),
-        confidence=confidence,
         status="pending_review",
     )
     db.add(evidence)
@@ -119,8 +116,6 @@ def approve_evidence_to_knowledge(db, evidence_id: str) -> DrinkKnowledge:
     elif not duplicate:
         kb.baseSugar = 0.0
     kb.source = f"reviewed:{evidence.source_type}:{merged_scope}"
-    new_confidence = adjust_confidence_for_scope(float(evidence.confidence or 0.5), extracted)
-    kb.confidence = min(max(float(kb.confidence or 0.0), new_confidence), 0.95)
     kb.updated_at = datetime.datetime.now().isoformat()
     if not duplicate:
         db.add(kb)
@@ -165,7 +160,7 @@ def analyze_image_with_vision(
                 "You are DrinkMind Image Evidence Agent. Extract beverage nutrition evidence from a user-uploaded image. "
                 "The image may contain one product or many products. Return strict JSON only. "
                 "Do not invent missing values. Use null for unknown volume, caffeine, or sugar. "
-                "For each item include: brand, name, type, volume, caffeine, sugar, volume_note, raw_evidence, confidence. "
+                "For each item include: brand, name, type, volume, caffeine, sugar, volume_note, raw_evidence. "
                 "type must be one of coffee, teacoffee, tea, milktea, fruittea, soda, other. "
                 "Classify latte-style products such as 米乳拿铁, 生椰拿铁, 厚乳拿铁, 生酪拿铁 as coffee unless the name explicitly says 茶咖. "
                 "Classify coconut or fruit flavored non-coffee ice drinks such as 海岛椰椰库可冰 and 柚见茉莉库可冰 as fruittea. "
@@ -262,7 +257,6 @@ def normalize_image_items(
             "sugar_range": sugar_range,
             "normalization_notes": notes,
             "raw_evidence": item.get("raw_evidence") or _format_raw_evidence(item),
-            "confidence": round(max(0.1, min(float(item.get("confidence") or 0.65), 0.95)), 2),
         })
     return normalized
 
@@ -285,7 +279,6 @@ def stage_image_items(db, items: list[dict], source_type: str = "image_upload") 
             "source_title": "Uploaded image evidence",
             "source_snippet": item.get("raw_evidence"),
             "discovery_method": source_type,
-            "confidence": item.get("confidence") or 0.65,
         })
         evidence = add_nutrition_evidence(db, candidate.id, {
             "source_type": source_type,
@@ -418,36 +411,6 @@ def merge_nutrition_scopes(existing_source: str | None, extracted: dict) -> str:
     if fields:
         return "partial"
     return "unknown"
-
-
-def adjust_confidence_for_scope(confidence: float, extracted: dict) -> float:
-    scope = nutrition_scope(extracted)
-    if scope in {"caffeine_only", "sugar_only"}:
-        return max(0.1, confidence - 0.08)
-    if scope == "unknown":
-        return max(0.1, confidence - 0.2)
-    return confidence
-
-
-def score_evidence(source_type: str, extracted: dict, raw_text: str) -> float:
-    base = {
-        "official": 0.88,
-        "nutrition_label": 0.82,
-        "community_measurement": 0.62,
-        "manual": 0.58,
-        "image_upload": 0.68,
-        "official_image": 0.78,
-        "nutrition_label_image": 0.82,
-        "community_screenshot": 0.55,
-    }.get(source_type, 0.5)
-    fields = sum(1 for key in ["volume", "caffeine", "sugar"] if extracted.get(key) is not None)
-    if fields >= 3:
-        base += 0.08
-    elif fields >= 2:
-        base += 0.04
-    if len(raw_text) < 20:
-        base -= 0.1
-    return round(max(0.1, min(base, 0.95)), 2)
 
 
 def find_duplicate_knowledge(db, brand: str | None, name: str | None):

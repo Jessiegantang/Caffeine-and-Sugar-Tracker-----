@@ -29,7 +29,6 @@ class NutritionGraphTests(unittest.TestCase):
                 caffeine=120,
                 baseSugar=20,
                 source="test_fixture",
-                confidence=0.95,
             ))
             db.commit()
 
@@ -110,7 +109,6 @@ class NutritionGraphTests(unittest.TestCase):
             "caffeine": 650,
             "sugarContent": 125,
             "data_source": "test",
-            "confidence": 0.9,
             "reasoning": ["test high range"],
             "estimation_method": "SQL_EXACT_MATCH",
             "matched_knowledge_id": "kb_high",
@@ -133,6 +131,34 @@ class NutritionGraphTests(unittest.TestCase):
         self.assertEqual(result["caffeine"], 650.0)
         self.assertEqual(result["sugarContent"], 125.0)
 
+    def test_complete_knowledge_skips_composition(self):
+        complete_result = {
+            "caffeine": 88,
+            "sugarContent": 16,
+            "data_source": "test",
+            "reasoning": ["complete test knowledge"],
+            "estimation_method": "SQL_EXACT_MATCH",
+            "matched_knowledge_id": "kb_complete",
+            "retrieval_score": None,
+            "knowledge_fields": {"caffeine": True, "sugar": True, "scope": "complete"},
+        }
+
+        with patch.object(nutrition_pipeline, "enrich_drink_data", return_value=complete_result), \
+             patch.object(nutrition_pipeline, "decompose_with_llm") as mocked_decompose:
+            result = estimate_drink_nutrition({
+                "brand": "CompleteBrand",
+                "name": "Complete Drink",
+                "type": "coffee",
+                "sugar": "full",
+                "volume": 500,
+                "data_source": "user_input",
+            }, db=None)
+
+        trace_ids = [event["id"] for event in result["explainability"]["graph_trace"]]
+        self.assertEqual(result["estimation_method"], "SQL_EXACT_MATCH")
+        self.assertNotIn("llm_composition_decompose", trace_ids)
+        mocked_decompose.assert_not_called()
+
     def test_contract_keys_unchanged(self):
         db = SessionLocal()
         try:
@@ -152,7 +178,6 @@ class NutritionGraphTests(unittest.TestCase):
             "caffeine",
             "sugarContent",
             "data_source",
-            "confidence",
             "reasoning",
             "estimation_method",
             "matched_knowledge_id",
@@ -169,7 +194,6 @@ class NutritionGraphTests(unittest.TestCase):
             "used_knowledge_match",
             "matched_knowledge_id",
             "retrieval_score",
-            "confidence",
             "reasoning",
             "components",
             "assumptions",
@@ -181,15 +205,15 @@ class NutritionGraphTests(unittest.TestCase):
         self._assert_trace_event_shape(explainability["graph_trace"])
 
     def test_llm_composition_decomposer_updates_complex_drink_when_enabled(self):
-        low_confidence_fallback = {
+        missing_knowledge = {
             "caffeine": 0,
             "sugarContent": 0,
             "data_source": "test",
-            "confidence": 0.4,
             "reasoning": ["test fallback"],
-            "estimation_method": "LOCAL_ESTIMATOR",
+            "estimation_method": "NO_KNOWLEDGE_MATCH",
             "matched_knowledge_id": None,
             "retrieval_score": None,
+            "knowledge_fields": {"caffeine": False, "sugar": False, "scope": "unknown"},
         }
         db = SessionLocal()
         try:
@@ -199,7 +223,7 @@ class NutritionGraphTests(unittest.TestCase):
                 "DRINKMIND_OFFLINE": "false",
                 "OPENAI_API_KEY": "real_test_key",
             }):
-                with patch.object(nutrition_pipeline, "enrich_drink_data", return_value=low_confidence_fallback), \
+                with patch.object(nutrition_pipeline, "enrich_drink_data", return_value=missing_knowledge), \
                      patch.object(
                          nutrition_pipeline,
                          "decompose_with_llm",
@@ -220,7 +244,6 @@ class NutritionGraphTests(unittest.TestCase):
                              "assumptions": ["LLM inferred mango coconut dessert drink components."],
                              "warnings": ["Sago or toppings are not modeled numerically."],
                              "uncertainty_drivers": ["Brand recipe and topping amount are unknown."],
-                             "confidence": 0.58,
                              "input": {
                                  "brand": "",
                                  "name": "杨枝甘露",
@@ -254,15 +277,15 @@ class NutritionGraphTests(unittest.TestCase):
         self.assertIn("mango_puree_or_juice_base", component_names)
 
     def test_llm_composition_failure_keeps_rule_decomposition(self):
-        low_confidence_fallback = {
+        missing_knowledge = {
             "caffeine": 0,
             "sugarContent": 0,
             "data_source": "test",
-            "confidence": 0.4,
             "reasoning": ["test fallback"],
-            "estimation_method": "LOCAL_ESTIMATOR",
+            "estimation_method": "NO_KNOWLEDGE_MATCH",
             "matched_knowledge_id": None,
             "retrieval_score": None,
+            "knowledge_fields": {"caffeine": False, "sugar": False, "scope": "unknown"},
         }
         db = SessionLocal()
         try:
@@ -272,7 +295,7 @@ class NutritionGraphTests(unittest.TestCase):
                 "DRINKMIND_OFFLINE": "false",
                 "OPENAI_API_KEY": "real_test_key",
             }):
-                with patch.object(nutrition_pipeline, "enrich_drink_data", return_value=low_confidence_fallback), \
+                with patch.object(nutrition_pipeline, "enrich_drink_data", return_value=missing_knowledge), \
                      patch.object(
                          nutrition_pipeline,
                          "decompose_with_llm",

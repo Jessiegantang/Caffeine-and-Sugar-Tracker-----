@@ -207,7 +207,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\quality_gate.ps1
 2. 输入一条自然语言饮品记录，例如“记录一杯库迪超燃生椰美式 650ml 无糖”。
 3. 展示 Agent 解析出的品牌、品名、容量和甜度。
 4. 展示没有可信知识命中时进入 Composition Estimation。
-5. 展开估算结果的技术细节，查看 graph trace、成分拆解、confidence 和 warnings。
+5. 展开估算结果的技术细节，查看 graph trace、成分拆解、assumptions 和 warnings。
 6. 提交一次营养纠正反馈。
 7. 在 evidence 审核面板中查看并审核反馈证据。
 8. 审核通过后再次记录同款饮品，展示已审核知识库优先命中。
