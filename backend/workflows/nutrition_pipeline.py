@@ -14,8 +14,8 @@ from langgraph.graph import END, START, StateGraph
 from knowledge.knowledge_lookup import enrich_drink_data
 from rules.composition_agent import decompose_drink, estimate_from_composition
 from rules.llm_composition_decomposer import (
-    decompose_with_optional_llm,
-    should_try_llm_decomposition,
+    composition_llm_enabled,
+    decompose_with_llm,
 )
 
 
@@ -30,6 +30,7 @@ class NutritionEstimationState(TypedDict, total=False):
     knowledge_result: dict
     route: str
     composition: dict
+    composition_fallback_warning: str
     composition_result: dict
     selected_result: dict
     verification: dict
@@ -65,7 +66,11 @@ def _normalize_input_node(state: NutritionEstimationState) -> NutritionEstimatio
 
 
 def _lookup_knowledge_node(state: NutritionEstimationState) -> NutritionEstimationState:
-    state["knowledge_result"] = enrich_drink_data(dict(state["normalized_drink"]), state["db"])
+    state["knowledge_result"] = enrich_drink_data(
+        dict(state["normalized_drink"]),
+        state["db"],
+        allow_llm_fallback=False,
+    )
     _trace(
         state,
         "lookup_knowledge",
@@ -112,14 +117,22 @@ def _use_knowledge_result_node(state: NutritionEstimationState) -> NutritionEsti
 
 
 def _composition_decompose_node(state: NutritionEstimationState) -> NutritionEstimationState:
+    if state.get("composition"):
+        return state
+
     try:
         state["composition"] = decompose_drink(state["normalized_drink"])
+        fallback_warning = state.pop("composition_fallback_warning", None)
+        if fallback_warning:
+            state["composition"].setdefault("warnings", []).append(fallback_warning)
+        state["composition"]["decomposition_source"] = "rule_fallback"
+        state["composition"]["llm_decomposition_used"] = False
         _trace(
             state,
             "composition_decompose",
             phase="拆解",
-            agent="Composition Decomposition Agent",
-            summary="把饮品名称、类型、容量和甜度拆成可估算的成分结构。",
+            agent="Rule Composition Fallback",
+            summary="LLM 成分拆解不可用时，使用本地名称和类型规则生成兜底成分结构。",
             input=_drink_summary(state.get("normalized_drink") or {}),
             output=_composition_summary(state["composition"]),
             confidence=state["composition"].get("confidence"),
@@ -133,26 +146,35 @@ def _llm_composition_decompose_node(state: NutritionEstimationState) -> Nutritio
     if state.get("route") != "composition":
         return state
 
-    try:
-        before = state.get("composition") or {}
-        state["composition"] = decompose_with_optional_llm(state["normalized_drink"], before)
-        used_llm = bool(state["composition"].get("llm_decomposition_used"))
+    if not composition_llm_enabled():
+        state["composition"] = None
         _trace(
             state,
             "llm_composition_decompose",
             phase="拆解",
             agent="LLM Composition Decomposer",
-            summary=(
-                "在规则拆解不确定或饮品较复杂时，让 LLM 只补充成分结构；"
-                "最终营养数值仍由规则计算。"
-            ),
-            input=_composition_summary(before),
+            summary="LLM 成分拆解未启用，转入本地规则兜底。",
+            input=_drink_summary(state.get("normalized_drink") or {}),
+            decision="LLM 未启用，使用规则兜底",
+        )
+        return state
+
+    try:
+        state["composition"] = decompose_with_llm(state["normalized_drink"])
+        _trace(
+            state,
+            "llm_composition_decompose",
+            phase="拆解",
+            agent="LLM Composition Decomposer",
+            summary="优先让 LLM 把饮品拆成结构化成分；最终咖啡因和糖分仍由确定性规则换算。",
+            input=_drink_summary(state.get("normalized_drink") or {}),
             output=_composition_summary(state["composition"]),
-            decision="使用 LLM 辅助拆解" if used_llm else "跳过 LLM，保留规则拆解",
+            decision="采用 LLM 成分结构",
             confidence=state["composition"].get("confidence"),
         )
     except Exception as e:
-        state["composition"].setdefault("warnings", []).append(
+        state["composition"] = None
+        state["composition_fallback_warning"] = (
             "LLM composition decomposition did not finish; using rule-based decomposition."
         )
         _trace(
@@ -160,8 +182,9 @@ def _llm_composition_decompose_node(state: NutritionEstimationState) -> Nutritio
             "llm_composition_decompose",
             phase="拆解",
             agent="LLM Composition Decomposer",
-            summary="LLM 是可选成分拆解增强；本次未完成，已保留规则拆解结果继续估算。",
+            summary="LLM 成分拆解未完成，转入本地规则兜底。",
             output={"error": str(e)},
+            decision="LLM 失败，使用规则兜底",
             status="warning",
         )
     return state
@@ -285,11 +308,15 @@ def _route_after_decision(state: NutritionEstimationState) -> str:
     return state.get("route") or "knowledge"
 
 
-def _route_after_decompose(state: NutritionEstimationState) -> str:
+def _route_after_llm_decompose(state: NutritionEstimationState) -> str:
     if state.get("route") != "composition":
         return "fallback_knowledge"
-    if should_try_llm_decomposition(state.get("normalized_drink") or {}, state.get("composition") or {}):
-        return "llm_composition_decompose"
+    return "composition_estimate" if state.get("composition") else "composition_decompose"
+
+
+def _route_after_rule_decompose(state: NutritionEstimationState) -> str:
+    if state.get("route") != "composition" or not state.get("composition"):
+        return "fallback_knowledge"
     return "composition_estimate"
 
 
@@ -424,19 +451,26 @@ def _build_graph():
         _route_after_decision,
         {
             "knowledge": "use_knowledge_result",
-            "composition": "composition_decompose",
+            "composition": "llm_composition_decompose",
+        },
+    )
+    graph.add_conditional_edges(
+        "llm_composition_decompose",
+        _route_after_llm_decompose,
+        {
+            "composition_estimate": "composition_estimate",
+            "composition_decompose": "composition_decompose",
+            "fallback_knowledge": "verify_result",
         },
     )
     graph.add_conditional_edges(
         "composition_decompose",
-        _route_after_decompose,
+        _route_after_rule_decompose,
         {
-            "llm_composition_decompose": "llm_composition_decompose",
             "composition_estimate": "composition_estimate",
             "fallback_knowledge": "verify_result",
         },
     )
-    graph.add_edge("llm_composition_decompose", "composition_estimate")
     graph.add_edge("composition_estimate", "verify_result")
     graph.add_edge("use_knowledge_result", "verify_result")
     graph.add_edge("verify_result", "build_explainability")

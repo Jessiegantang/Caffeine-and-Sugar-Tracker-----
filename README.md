@@ -92,6 +92,24 @@ CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 本地密钥和私有配置请写入 `backend/.env`，示例配置保留在 `backend/.env.example`。
 
+### 可选：接入 Dify 陪伴助手
+
+项目可以把非饮品记录类的陪伴问答交给 Dify Chatflow，同时保留原有本地
+`companion_agent` 作为自动降级方案。前端和 `/api/chat` 接口无需改变。
+
+```env
+COMPANION_PROVIDER=dify
+DIFY_BASE_URL=https://api.dify.ai/v1
+DIFY_API_KEY=your_dify_app_api_key
+DIFY_USER_ID=drinkmind-local-user
+DIFY_TIMEOUT_SECONDS=60
+```
+
+FastAPI 会把今日咖啡因、今日糖分、睡眠时长、用户偏好和最近聊天记录作为
+Chatflow 输入变量发送给 Dify。设置 `COMPANION_PROVIDER=local`、启用
+`DRINKMIND_OFFLINE`、未配置密钥或 Dify 请求失败时，系统都会继续使用本地陪伴助手。
+真实密钥只能保存在 `backend/.env`，不要写入前端或提交到版本库。
+
 ### 4. 初始化数据库
 
 ```powershell

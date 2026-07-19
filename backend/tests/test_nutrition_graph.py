@@ -60,14 +60,15 @@ class NutritionGraphTests(unittest.TestCase):
     def test_no_knowledge_path_uses_composition_nodes(self):
         db = SessionLocal()
         try:
-            result = estimate_drink_nutrition({
-                "brand": "NoKbGraphBrand",
-                "name": "coconut latte",
-                "type": "coffee",
-                "sugar": "three",
-                "volume": 500,
-                "data_source": "user_input",
-            }, db)
+            with patch.object(nutrition_pipeline, "composition_llm_enabled", return_value=False):
+                result = estimate_drink_nutrition({
+                    "brand": "NoKbGraphBrand",
+                    "name": "coconut latte",
+                    "type": "coffee",
+                    "sugar": "three",
+                    "volume": 500,
+                    "data_source": "user_input",
+                }, db)
         finally:
             db.close()
 
@@ -75,6 +76,7 @@ class NutritionGraphTests(unittest.TestCase):
         trace_ids = [event.get("id") for event in trace]
         self.assertEqual(result["estimation_method"], "COMPOSITION_ESTIMATION")
         self.assertTrue(result["explainability"]["used_composition"])
+        self.assertIn("llm_composition_decompose", trace_ids)
         self.assertIn("composition_decompose", trace_ids)
         self.assertIn("composition_estimate", trace_ids)
         self.assertIn("verify_result", trace_ids)
@@ -83,7 +85,8 @@ class NutritionGraphTests(unittest.TestCase):
     def test_composition_error_falls_back_without_raising(self):
         db = SessionLocal()
         try:
-            with patch.object(nutrition_pipeline, "estimate_from_composition", side_effect=RuntimeError("boom")):
+            with patch.object(nutrition_pipeline, "composition_llm_enabled", return_value=False), \
+                 patch.object(nutrition_pipeline, "estimate_from_composition", side_effect=RuntimeError("boom")):
                 result = estimate_drink_nutrition({
                     "brand": "NoKbGraphErrorBrand",
                     "name": "coconut latte",
@@ -133,14 +136,15 @@ class NutritionGraphTests(unittest.TestCase):
     def test_contract_keys_unchanged(self):
         db = SessionLocal()
         try:
-            result = estimate_drink_nutrition({
-                "brand": "NoKbContractBrand",
-                "name": "americano",
-                "type": "coffee",
-                "sugar": "none",
-                "volume": 500,
-                "data_source": "user_input",
-            }, db)
+            with patch.object(nutrition_pipeline, "composition_llm_enabled", return_value=False):
+                result = estimate_drink_nutrition({
+                    "brand": "NoKbContractBrand",
+                    "name": "americano",
+                    "type": "coffee",
+                    "sugar": "none",
+                    "volume": 500,
+                    "data_source": "user_input",
+                }, db)
         finally:
             db.close()
 
@@ -198,7 +202,7 @@ class NutritionGraphTests(unittest.TestCase):
                 with patch.object(nutrition_pipeline, "enrich_drink_data", return_value=low_confidence_fallback), \
                      patch.object(
                          nutrition_pipeline,
-                         "decompose_with_optional_llm",
+                         "decompose_with_llm",
                          return_value={
                              "drink_type": "mango_coconut_drink",
                              "coffee_base": None,
@@ -224,7 +228,7 @@ class NutritionGraphTests(unittest.TestCase):
                                  "volume": 500,
                                  "sugar": "half",
                              },
-                             "decomposition_source": "llm_assisted",
+                            "decomposition_source": "llm_primary",
                              "llm_decomposition_used": True,
                          },
                      ):
@@ -244,6 +248,7 @@ class NutritionGraphTests(unittest.TestCase):
         self.assertEqual(result["composition"]["drink_type"], "mango_coconut_drink")
         self.assertTrue(result["composition"]["llm_decomposition_used"])
         self.assertIn("llm_composition_decompose", trace_ids)
+        self.assertNotIn("composition_decompose", trace_ids)
         component_names = {item["name"] for item in result["composition"]["components"]}
         self.assertIn("coconut_milk", component_names)
         self.assertIn("mango_puree_or_juice_base", component_names)
@@ -270,7 +275,7 @@ class NutritionGraphTests(unittest.TestCase):
                 with patch.object(nutrition_pipeline, "enrich_drink_data", return_value=low_confidence_fallback), \
                      patch.object(
                          nutrition_pipeline,
-                         "decompose_with_optional_llm",
+                         "decompose_with_llm",
                          side_effect=RuntimeError("llm boom"),
                      ):
                     result = estimate_drink_nutrition({
@@ -290,6 +295,7 @@ class NutritionGraphTests(unittest.TestCase):
         self.assertEqual(result["estimation_method"], "COMPOSITION_ESTIMATION")
         self.assertEqual(result["composition"]["drink_type"], "fruit_tea")
         self.assertIn("llm_composition_decompose", trace_ids)
+        self.assertIn("composition_decompose", trace_ids)
         self.assertEqual(llm_trace["status"], "warning")
         self.assertIn("LLM composition decomposition did not finish; using rule-based decomposition.", result["explainability"]["warnings"])
 

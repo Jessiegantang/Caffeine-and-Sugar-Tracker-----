@@ -1,9 +1,10 @@
 import datetime
 import uuid
 
-from agents.companion_agent import generate_companion_response
+from agents.companion_agent import generate_companion_response as generate_local_companion_response
 from agents.intake_parser import parse_intake_message
 from db.database import ChatLog, DrinkLog, SleepRecord
+from services.dify_companion_service import DifyCompanionError, dify_available, generate_dify_turn
 from services.memory_service import apply_memory_updates, extract_memory_updates
 from services.trace_service import save_agent_trace
 
@@ -89,10 +90,30 @@ def send_chat_message(db, input_data) -> dict:
     # 3. Get context
     context = build_companion_context(db, input_data.date)
 
-    # 4. Parse possible drink logging action before falling back to companion chat
-    parsed_intake = parse_intake_message(input_data.message)
-    parsed_intake = complete_pending_intake(history, input_data.message, parsed_intake)
-    if parsed_intake.get("intent") == "log_drink":
+    # 4. Let Dify orchestrate the whole chat first. Restore the complete local
+    # route when Dify is unavailable or returns an invalid structured form.
+    dify_turn = None
+    fallback_reason = None
+    if dify_available():
+        try:
+            dify_turn = generate_dify_turn(input_data.message, history, context)
+        except DifyCompanionError as exc:
+            fallback_reason = exc.code
+
+    if dify_turn is not None:
+        parsed_intake = dify_turn.get("parsed_intake")
+        ai_response_text = dify_turn["text"]
+        if parsed_intake:
+            memory_updates = extract_memory_updates(input_data.message, "log_drink", parsed_intake, db)
+        else:
+            memory_updates = extract_memory_updates(input_data.message, "ask_advice", None, db)
+        provider = "dify"
+    else:
+        parsed_intake = parse_intake_message(input_data.message)
+        parsed_intake = complete_pending_intake(history, input_data.message, parsed_intake)
+        provider = "local"
+
+    if dify_turn is None and parsed_intake.get("intent") == "log_drink":
         memory_updates = extract_memory_updates(input_data.message, "log_drink", parsed_intake, db)
         if parsed_intake.get("missing_fields"):
             ai_response_text = parsed_intake.get("follow_up") or "我还需要一点信息才能帮你记录这杯饮品。"
@@ -102,10 +123,10 @@ def send_chat_message(db, input_data) -> dict:
                 f"{parsed_intake.get('name')}，{parsed_intake.get('volume')}ml，"
                 f"甜度 {parsed_intake.get('sugar')}。我已经整理成结构化饮品对象。"
             )
-    else:
+    elif dify_turn is None:
         parsed_intake = None
         memory_updates = extract_memory_updates(input_data.message, "ask_advice", None, db)
-        ai_response_text = generate_companion_response(input_data.message, history, context)
+        ai_response_text = generate_local_companion_response(input_data.message, history, context)
     memory_updates = apply_memory_updates(db, memory_updates)
 
     # 5. Save AI response
@@ -118,15 +139,19 @@ def send_chat_message(db, input_data) -> dict:
         "trace_id": f"trace_{uuid.uuid4().hex[:12]}",
         "user_message": input_data.message,
         "intent": parsed_intake.get("intent") if parsed_intake else "ask_advice",
-        "agents_called": ["intake_parser"] if parsed_intake else ["intake_parser", "companion_agent"],
-        "tools_used": ["LOCAL_INTAKE_PARSER"] if parsed_intake else ["LLM_CHAT"],
+        "agents_called": ["dify_assistant"] if provider == "dify" else (
+            ["intake_parser"] if parsed_intake else ["intake_parser", "companion_agent"]
+        ),
+        "tools_used": ["DIFY_CHATFLOW"] if provider == "dify" else (
+            ["LOCAL_INTAKE_PARSER"] if parsed_intake else ["LOCAL_COMPANION"]
+        ),
         "retrieved_docs": [],
-        "model_name": "local" if parsed_intake else None,
+        "model_name": "dify" if provider == "dify" else ("local" if parsed_intake else None),
         "latency_ms": 0.0,
         "confidence": parsed_intake.get("confidence") if parsed_intake else None,
         "memory_updates": memory_updates,
         "final_action": "ask_follow_up" if parsed_intake and parsed_intake.get("missing_fields") else ("fill_log_form" if parsed_intake else "answer_advice"),
-        "error": None,
+        "error": fallback_reason,
     }
     save_agent_trace(db, trace_state)
 

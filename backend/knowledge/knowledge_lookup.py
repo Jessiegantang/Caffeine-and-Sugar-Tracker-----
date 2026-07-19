@@ -247,7 +247,7 @@ def _apply_hybrid_knowledge_result(r: dict, *, known: dict, ratio: float, source
     return r
 
 
-def enrich_drink_data(r: dict, db) -> dict:
+def enrich_drink_data(r: dict, db, *, allow_llm_fallback: bool = True) -> dict:
     if "caffeine" not in r and "sugarContent" not in r:
         r["data_source"] = "用户录入"
     if r.get("data_source") in [None, "", "用户录入", "本地算法估算", "Local Estimator (Dynamic DB)"]:
@@ -390,7 +390,7 @@ def enrich_drink_data(r: dict, db) -> dict:
         except Exception as e:
             print(f"[RAG Error] {e}")
 
-    if not llm_enabled():
+    if not allow_llm_fallback or not llm_enabled():
         local_est = estimate_nutrition(brand, name, drink_type, volume, sugar_level)
         r["caffeine"] = local_est["caffeine"]
         r["sugarContent"] = local_est["sugar"]

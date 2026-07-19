@@ -10,7 +10,8 @@ from rules.composition_agent import (
     estimate_composition_nutrition,
     estimate_from_composition,
 )
-from rules.llm_composition_decomposer import should_try_llm_decomposition
+import rules.llm_composition_decomposer as llm_decomposer
+from rules.llm_composition_decomposer import composition_llm_enabled, decompose_with_llm
 
 
 class CompositionAgentTests(unittest.TestCase):
@@ -219,21 +220,49 @@ class CompositionAgentTests(unittest.TestCase):
         self.assertGreaterEqual(result["sugar_range"]["max"] - result["sugar_range"]["min"], 10.0)
         self.assertLess(result["confidence"], 0.5)
 
-    def test_llm_composition_decomposer_is_disabled_by_default(self):
-        composition = decompose_drink({
-            "name": "杨枝甘露",
-            "type": "fruittea",
-            "volume": 500,
-            "sugar": "half",
-        })
-
+    def test_llm_composition_decomposer_can_be_disabled(self):
         with patch.dict(os.environ, {"ENABLE_LLM_COMPOSITION": "false"}):
-            self.assertFalse(should_try_llm_decomposition({
-                "name": "杨枝甘露",
-                "type": "fruittea",
-                "volume": 500,
-                "sugar": "half",
-            }, composition))
+            self.assertFalse(composition_llm_enabled())
+
+    def test_llm_primary_components_are_converted_to_rule_based_nutrition(self):
+        llm_result = llm_decomposer.LLMCompositionResult(
+            drink_type="milk_tea",
+            tea_base="jasmine_tea",
+            tea_base_ratio=0.45,
+            milk_base="milk",
+            milk_ratio=0.35,
+            fruit_base="apple_base",
+            fruit_ratio=0.15,
+            syrup_pumps=0,
+            natural_sugar_sources=["milk", "apple_base"],
+            assumptions=["用户选择的奶茶类型作为主要约束。"],
+            confidence=0.82,
+        )
+        drink = {
+            "brand": "Test Brand",
+            "name": "茉莉苹果冰奶",
+            "type": "milktea",
+            "volume": 500,
+            "sugar": "none",
+        }
+
+        with patch.dict(os.environ, {
+            "ENABLE_LLM_COMPOSITION": "true",
+            "DRINKMIND_OFFLINE": "false",
+            "OPENAI_API_KEY": "real_test_key",
+        }), patch.object(llm_decomposer, "_call_llm_decomposer", return_value=llm_result):
+            composition = decompose_with_llm(drink)
+
+        estimate = estimate_from_composition(composition)
+        self.assertEqual(composition["drink_type"], "milk_tea")
+        self.assertEqual(composition["input"]["type"], "milktea")
+        self.assertEqual(composition["decomposition_source"], "llm_primary")
+        self.assertTrue(composition["llm_decomposition_used"])
+        self.assertEqual(composition["tea_base_volume_ml"], 225.0)
+        self.assertEqual(composition["milk_volume_ml"], 175.0)
+        self.assertEqual(composition["fruit_base_volume_ml"], 75.0)
+        self.assertGreater(estimate["caffeine"], 0)
+        self.assertGreater(estimate["sugarContent"], 0)
 
 
 if __name__ == "__main__":

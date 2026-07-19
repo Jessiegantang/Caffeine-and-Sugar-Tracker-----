@@ -1,7 +1,7 @@
-"""Optional LLM-assisted beverage composition decomposition.
+"""LLM-first beverage composition decomposition.
 
-The LLM is only allowed to infer a normalized ingredient structure. Nutrition
-numbers are still calculated by ingredient rules in composition_agent.py.
+The LLM only infers a normalized ingredient structure. Caffeine and sugar
+numbers are always calculated by ingredient rules in composition_agent.py.
 """
 
 from __future__ import annotations
@@ -14,25 +14,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from agents.llm_config import env_truthy, llm
-
-
-COMPLEX_DRINK_MARKERS = [
-    "杨枝甘露",
-    "芒果甘露",
-    "芒果西米",
-    "西米露",
-    "mango sago",
-    "多肉",
-    "芝芝",
-    "奶盖",
-    "厚乳",
-    "厚椰",
-    "麻薯",
-    "芋泥",
-    "小料",
-    "波波",
-    "珍珠",
-]
 
 
 class LLMCompositionResult(BaseModel):
@@ -60,18 +41,6 @@ class LLMCompositionResult(BaseModel):
     confidence: float = Field(default=0.55, ge=0.0, le=1.0)
 
 
-def should_try_llm_decomposition(drink: dict, rule_composition: dict) -> bool:
-    """Return whether the optional LLM decomposer should run."""
-    if not composition_llm_enabled():
-        return False
-
-    text = _drink_text(drink)
-    confidence = _safe_float(rule_composition.get("confidence"), default=0.0)
-    if confidence < 0.65:
-        return True
-    return any(marker.lower() in text for marker in COMPLEX_DRINK_MARKERS)
-
-
 def composition_llm_enabled() -> bool:
     """Composition-specific LLM gate.
 
@@ -86,16 +55,18 @@ def composition_llm_enabled() -> bool:
     return bool(api_key and not api_key.startswith("dummy_"))
 
 
-def decompose_with_optional_llm(drink: dict, rule_composition: dict) -> dict:
-    """Use LLM output to refine a rule-based composition when enabled."""
-    if not should_try_llm_decomposition(drink, rule_composition):
-        return rule_composition
+def decompose_with_llm(drink: dict) -> dict:
+    """Infer components with the LLM before any name-based rule decomposition."""
+    if not composition_llm_enabled():
+        raise RuntimeError("LLM composition decomposition is disabled")
 
-    result = _call_llm_decomposer(drink, rule_composition)
-    return _merge_llm_composition(rule_composition, result)
+    result = _call_llm_decomposer(drink)
+    composition = _build_llm_composition(drink, result)
+    _validate_llm_composition(composition)
+    return composition
 
 
-def _call_llm_decomposer(drink: dict, rule_composition: dict) -> LLMCompositionResult:
+def _call_llm_decomposer(drink: dict) -> LLMCompositionResult:
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -106,14 +77,17 @@ def _call_llm_decomposer(drink: dict, rule_composition: dict) -> LLMCompositionR
                 "drink_type、coffee_base、tea_base、milk_base、fruit_base 等枚举字段可以保留英文代码值。"
                 "请保守推断，并说明不确定性。"
                 "把成分映射到已知类别：espresso、tea_base、milk_base、fruit_base、added_syrup。"
+                "设置某个液体基底时必须同时给出对应 ratio，所有 ratio 为 0-1 且总和不得超过 1。"
+                "含咖啡时必须给出 espresso_shots；不含咖啡时必须为 0。"
                 "小料或固体配料只放进中文提醒/不确定性，不要编造营养数值。"
             ),
         ),
         (
             "user",
             (
-                "Drink: brand={brand}, name={name}, type={type}, volume={volume}ml, "
-                "sweetness={sugar}. Rule composition: {rule_summary}"
+                "Drink: brand={brand}, name={name}, user_selected_type={type}, "
+                "volume={volume}ml, sweetness={sugar}. "
+                "Treat user_selected_type as authoritative unless the name contains explicit contradictory evidence."
             ),
         ),
     ])
@@ -123,24 +97,18 @@ def _call_llm_decomposer(drink: dict, rule_composition: dict) -> LLMCompositionR
         "type": drink.get("type") or "",
         "volume": drink.get("volume") or "",
         "sugar": drink.get("sugar") or "",
-        "rule_summary": {
-            "drink_type": rule_composition.get("drink_type"),
-            "confidence": rule_composition.get("confidence"),
-            "assumptions": rule_composition.get("assumptions"),
-            "warnings": rule_composition.get("warnings"),
-        },
     }
     if _prefer_json_mode():
-        return _call_llm_json_fallback(drink, rule_composition)
+        return _call_llm_json_fallback(drink)
 
     try:
         structured_llm = llm.with_structured_output(LLMCompositionResult, method="function_calling")
         return (prompt | structured_llm).invoke(payload)
     except Exception:
-        return _call_llm_json_fallback(drink, rule_composition)
+        return _call_llm_json_fallback(drink)
 
 
-def _call_llm_json_fallback(drink: dict, rule_composition: dict) -> LLMCompositionResult:
+def _call_llm_json_fallback(drink: dict) -> LLMCompositionResult:
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -149,6 +117,8 @@ def _call_llm_json_fallback(drink: dict, rule_composition: dict) -> LLMCompositi
                 "不要估算咖啡因或糖分数值。"
                 "assumptions、warnings、uncertainty_drivers 必须使用简体中文。"
                 "drink_type、coffee_base、tea_base、milk_base、fruit_base 等枚举字段可以保留英文代码值。"
+                "设置某个液体基底时必须同时给出对应 ratio，所有 ratio 为 0-1 且总和不得超过 1。"
+                "含咖啡时必须给出 espresso_shots；不含咖啡时必须为 0。"
                 "允许的 keys: drink_type, coffee_base, espresso_shots, tea_base, "
                 "tea_base_ratio, milk_base, milk_ratio, fruit_base, fruit_ratio, "
                 "syrup_pumps, natural_sugar_sources, assumptions, warnings, "
@@ -159,18 +129,13 @@ def _call_llm_json_fallback(drink: dict, rule_composition: dict) -> LLMCompositi
             "user",
             (
                 "请推断这杯饮品的组成。中文字段请用简体中文。"
-                "Drink JSON: {drink_json}. Rule composition JSON: {rule_json}"
+                "用户选择的 type 应视为权威输入，除非名称中有明确矛盾证据。"
+                "Drink JSON: {drink_json}."
             ),
         ),
     ])
     response = (prompt | llm).invoke({
         "drink_json": json.dumps(drink, ensure_ascii=False),
-        "rule_json": json.dumps({
-            "drink_type": rule_composition.get("drink_type"),
-            "confidence": rule_composition.get("confidence"),
-            "assumptions": rule_composition.get("assumptions"),
-            "warnings": rule_composition.get("warnings"),
-        }, ensure_ascii=False),
     })
     content = getattr(response, "content", response)
     if isinstance(content, list):
@@ -179,51 +144,78 @@ def _call_llm_json_fallback(drink: dict, rule_composition: dict) -> LLMCompositi
     return LLMCompositionResult(**data)
 
 
-def _merge_llm_composition(rule_composition: dict, result: LLMCompositionResult) -> dict:
-    composition = dict(rule_composition)
-    volume = _safe_float((composition.get("input") or {}).get("volume"), default=500.0)
+def _build_llm_composition(drink: dict, result: LLMCompositionResult) -> dict:
+    volume = _safe_float(drink.get("volume"), default=500.0)
+    composition = {
+        "drink_type": result.drink_type or "unknown",
+        "coffee_base": result.coffee_base,
+        "espresso_shots": _clamp(result.espresso_shots or 0.0, 0.0, 4.0),
+        "tea_base": result.tea_base,
+        "tea_base_volume_ml": 0.0,
+        "milk_base": result.milk_base,
+        "milk_volume_ml": 0.0,
+        "fruit_base": result.fruit_base,
+        "fruit_base_volume_ml": 0.0,
+        "sweetener_type": "syrup",
+        "sweetener_level": str(drink.get("sugar") or "unknown"),
+        "syrup_pumps": _clamp(result.syrup_pumps or 0.0, 0.0, 8.0),
+        "natural_sugar_sources": _dedupe(result.natural_sugar_sources),
+        "assumptions": _dedupe(result.assumptions),
+        "warnings": _dedupe(result.warnings),
+        "uncertainty_drivers": _dedupe(result.uncertainty_drivers),
+        "confidence": round(_clamp(result.confidence, 0.0, 1.0), 2),
+        "input": {
+            "brand": drink.get("brand") or "",
+            "name": drink.get("name") or "",
+            "type": drink.get("type") or "",
+            "volume": int(volume),
+            "sugar": drink.get("sugar"),
+        },
+        "decomposition_source": "llm_primary",
+        "llm_decomposition_used": True,
+    }
 
-    if result.drink_type:
-        composition["drink_type"] = result.drink_type
-    if result.coffee_base:
-        composition["coffee_base"] = result.coffee_base
-    if result.espresso_shots is not None:
-        composition["espresso_shots"] = _clamp(result.espresso_shots, 0.0, 4.0)
-    if result.tea_base:
-        composition["tea_base"] = result.tea_base
     if result.tea_base_ratio is not None:
         composition["tea_base_volume_ml"] = round(volume * _clamp(result.tea_base_ratio, 0.0, 1.0), 1)
-    if result.milk_base:
-        composition["milk_base"] = result.milk_base
     if result.milk_ratio is not None:
         composition["milk_volume_ml"] = round(volume * _clamp(result.milk_ratio, 0.0, 1.0), 1)
-    if result.fruit_base:
-        composition["fruit_base"] = result.fruit_base
     if result.fruit_ratio is not None:
         composition["fruit_base_volume_ml"] = round(volume * _clamp(result.fruit_ratio, 0.0, 1.0), 1)
-    if result.syrup_pumps is not None:
-        composition["syrup_pumps"] = _clamp(result.syrup_pumps, 0.0, 8.0)
-
-    composition["natural_sugar_sources"] = _dedupe(
-        list(composition.get("natural_sugar_sources") or []) + result.natural_sugar_sources
-    )
-    composition["assumptions"] = _dedupe(
-        list(composition.get("assumptions") or []) + result.assumptions
-    )
-    composition["warnings"] = _dedupe(
-        list(composition.get("warnings") or []) + result.warnings
-    )
-    composition["uncertainty_drivers"] = _dedupe(
-        list(composition.get("uncertainty_drivers") or []) + result.uncertainty_drivers
-    )
-    composition["confidence"] = round(min(_safe_float(composition.get("confidence"), 0.5), result.confidence), 2)
-    composition["decomposition_source"] = "llm_assisted"
-    composition["llm_decomposition_used"] = True
     return composition
 
 
-def _drink_text(drink: dict) -> str:
-    return f"{drink.get('brand') or ''} {drink.get('name') or ''} {drink.get('type') or ''}".lower()
+def _validate_llm_composition(composition: dict) -> None:
+    base_volume_pairs = (
+        ("tea_base", "tea_base_volume_ml"),
+        ("milk_base", "milk_volume_ml"),
+        ("fruit_base", "fruit_base_volume_ml"),
+    )
+    for base_field, volume_field in base_volume_pairs:
+        if composition.get(base_field) and _safe_float(composition.get(volume_field), 0.0) <= 0:
+            raise ValueError(f"LLM returned {base_field} without a usable ratio")
+    if composition.get("coffee_base") and _safe_float(composition.get("espresso_shots"), 0.0) <= 0:
+        raise ValueError("LLM returned a coffee base without espresso shots")
+
+    input_volume = _safe_float((composition.get("input") or {}).get("volume"), 500.0)
+    liquid_volume = sum(
+        _safe_float(composition.get(volume_field), 0.0)
+        for _, volume_field in base_volume_pairs
+    )
+    if liquid_volume > input_volume * 1.01:
+        raise ValueError("LLM component ratios exceed the drink volume")
+
+    quantified = any(
+        _safe_float(composition.get(field), 0.0) > 0
+        for field in (
+            "espresso_shots",
+            "tea_base_volume_ml",
+            "milk_volume_ml",
+            "fruit_base_volume_ml",
+            "syrup_pumps",
+        )
+    )
+    if composition.get("drink_type") == "unknown" or not quantified:
+        raise ValueError("LLM returned no usable quantified beverage composition")
 
 
 def _safe_float(value: Any, default: float) -> float:
