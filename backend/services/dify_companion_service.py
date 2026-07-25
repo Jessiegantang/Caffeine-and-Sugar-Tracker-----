@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List
 
 import httpx
 
@@ -82,6 +82,21 @@ def _build_inputs(history: List[Dict[str, str]], context: Dict[str, Any]) -> dic
     return inputs
 
 
+def _request_payload(
+    user_message: str,
+    history: List[Dict[str, str]],
+    context: Dict[str, Any],
+    response_mode: str,
+) -> dict:
+    return {
+        "inputs": _build_inputs(history, context),
+        "query": user_message,
+        "response_mode": response_mode,
+        "user": os.getenv("DIFY_USER_ID", "drinkmind-local-user").strip()
+        or "drinkmind-local-user",
+    }
+
+
 def call_dify_companion(
     user_message: str,
     history: List[Dict[str, str]],
@@ -92,13 +107,7 @@ def call_dify_companion(
         raise DifyCompanionError("not_configured")
 
     base_url = os.getenv("DIFY_BASE_URL", DEFAULT_DIFY_BASE_URL).strip().rstrip("/")
-    user_id = os.getenv("DIFY_USER_ID", "drinkmind-local-user").strip() or "drinkmind-local-user"
-    payload = {
-        "inputs": _build_inputs(history, context),
-        "query": user_message,
-        "response_mode": "blocking",
-        "user": user_id,
-    }
+    payload = _request_payload(user_message, history, context, "blocking")
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -135,6 +144,94 @@ def call_dify_companion(
     if not isinstance(answer, str) or not answer.strip():
         raise DifyCompanionError("empty_answer")
     return answer.strip()
+
+
+def stream_dify_companion_turn(
+    user_message: str,
+    history: List[Dict[str, str]],
+    context: Dict[str, Any],
+) -> Iterator[dict]:
+    """Yield display-safe answer deltas followed by one complete parsed turn."""
+    api_key = os.getenv("DIFY_API_KEY", "").strip()
+    if not api_key:
+        raise DifyCompanionError("not_configured")
+
+    base_url = os.getenv("DIFY_BASE_URL", DEFAULT_DIFY_BASE_URL).strip().rstrip("/")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = _request_payload(user_message, history, context, "streaming")
+    raw_answer = ""
+    pending_prefix = ""
+    is_drink_form = False
+
+    try:
+        with httpx.stream(
+            "POST",
+            f"{base_url}/chat-messages",
+            json=payload,
+            headers=headers,
+            timeout=_timeout_seconds(),
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(line[5:].strip())
+                except (TypeError, ValueError):
+                    continue
+                if event.get("event") == "error":
+                    raise DifyCompanionError("upstream_stream_error")
+                if event.get("event") not in {"message", "agent_message"}:
+                    continue
+                delta = event.get("answer")
+                if not isinstance(delta, str) or not delta:
+                    continue
+
+                raw_answer += delta
+                if is_drink_form:
+                    continue
+                pending_prefix += delta
+                if DRINK_FORM_MARKER.startswith(pending_prefix):
+                    continue
+                if pending_prefix.startswith(DRINK_FORM_MARKER):
+                    is_drink_form = True
+                    pending_prefix = ""
+                    continue
+                yield {"type": "delta", "text": pending_prefix}
+                pending_prefix = ""
+    except httpx.TimeoutException as exc:
+        raise DifyCompanionError("timeout") from exc
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code in {401, 403}:
+            code = "authentication_failed"
+        elif status_code == 429:
+            code = "rate_limited"
+        else:
+            code = "upstream_http_error"
+        raise DifyCompanionError(code) from exc
+    except httpx.HTTPError as exc:
+        raise DifyCompanionError("connection_failed") from exc
+
+    if pending_prefix and not is_drink_form:
+        yield {"type": "delta", "text": pending_prefix}
+    if not raw_answer.strip():
+        raise DifyCompanionError("empty_answer")
+
+    turn = parse_dify_answer(raw_answer)
+    if is_drink_form:
+        yield {"type": "replace", "text": turn["text"]}
+    yield {
+        "type": "complete",
+        "turn": {
+            **turn,
+            "provider": "dify",
+            "fallback_reason": None,
+        },
+    }
 
 
 def parse_dify_answer(answer: str) -> dict:

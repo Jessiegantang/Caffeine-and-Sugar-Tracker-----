@@ -1,4 +1,7 @@
+import json
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from api.schemas import AgentActInput, ChatInput, IntakeParseInput
@@ -30,6 +33,23 @@ def agent_act(input_data: AgentActInput, db: Session = Depends(get_db)):
 @router.post("/api/chat")
 def send_chat_message(input_data: ChatInput, db: Session = Depends(get_db)):
     return chat_service.send_chat_message(db, input_data)
+
+
+@router.post("/api/chat/stream")
+def stream_chat_message(input_data: ChatInput, db: Session = Depends(get_db)):
+    def event_stream():
+        for event in chat_service.stream_chat_message(db, input_data):
+            payload = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+            yield f"data: {payload}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/api/agent/traces")

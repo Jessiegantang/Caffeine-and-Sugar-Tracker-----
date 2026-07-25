@@ -3,13 +3,35 @@ dist/
 
 venv/
 backend/venv/
+.venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 .env
-backend/.env
+.env.*
+!.env.example
+!**/.env.example
+
 *.db
+*.sqlite
+*.sqlite3
 backend/chroma_db/
+
+.codex/
+.codex_work/
+*.difypkg
+
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
 *.docx
 *.pdf
 

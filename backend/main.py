@@ -42,7 +42,8 @@ app.include_router(knowledge_router)
 app.include_router(health_router)
 
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+if os.path.isdir(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
 
 
 if __name__ == "__main__":

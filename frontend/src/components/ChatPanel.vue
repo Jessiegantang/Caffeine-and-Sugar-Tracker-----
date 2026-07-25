@@ -2,7 +2,7 @@
 import { nextTick, ref, watch } from 'vue';
 import {
   fetchChatHistoryApi,
-  sendChatMessageApi,
+  sendChatMessageStreamApi,
 } from '../api.js';
 import {
   ADD_PARSED_INTAKE_EVENT,
@@ -14,7 +14,6 @@ import { state } from '../state.js';
 
 const historyContainer = ref(null);
 const messages = ref([]);
-const parsedIntakes = ref([]);
 const input = ref('');
 const sending = ref(false);
 const error = ref('');
@@ -31,7 +30,7 @@ const sugarLabels = {
 
 watch(() => state.selectedDate, () => loadHistory(), { immediate: true });
 
-async function loadHistory(clearParsed = true) {
+async function loadHistory() {
   if (!state.selectedDate) return;
 
   const currentRequest = ++historyRequest;
@@ -40,7 +39,6 @@ async function loadHistory(clearParsed = true) {
     const data = await fetchChatHistoryApi(state.selectedDate);
     if (currentRequest !== historyRequest) return;
     messages.value = data.history || [];
-    if (clearParsed) parsedIntakes.value = [];
     await scrollToBottom();
   } catch {
     if (currentRequest !== historyRequest) return;
@@ -56,15 +54,27 @@ async function sendMessage() {
   sending.value = true;
   error.value = '';
   messages.value.push({ role: 'user', content: message });
+  const streamMessageId = `stream-${Date.now()}`;
+  messages.value.push({ role: 'assistant', content: '', id: streamMessageId, streaming: true });
   await scrollToBottom();
 
   try {
-    const data = await sendChatMessageApi(state.selectedDate, message);
-    await loadHistory(false);
+    const data = await sendChatMessageStreamApi(state.selectedDate, message, async (event) => {
+      const assistantMessage = messages.value.find((item) => item.id === streamMessageId);
+      if (!assistantMessage) return;
+      if (event.type === 'delta') assistantMessage.content += event.text || '';
+      if (event.type === 'replace') assistantMessage.content = event.text || '';
+      if (event.type === 'done') assistantMessage.streaming = false;
+      await scrollToBottom();
+    });
 
     const parsedIntake = data.parsed_intake;
     if (canAddParsedIntake(parsedIntake)) {
-      parsedIntakes.value.push({ ...parsedIntake, submitted: false });
+      messages.value.push({
+        role: 'intake_card',
+        id: data.trace_id || `intake-${Date.now()}`,
+        parsed: { ...parsedIntake, submitted: false },
+      });
       emitAppEvent(INTAKE_PARSED_EVENT, parsedIntake);
     }
     if (data.nutrition_result) {
@@ -72,6 +82,12 @@ async function sendMessage() {
     }
     await scrollToBottom();
   } catch {
+    const assistantMessage = messages.value.find((item) => item.id === streamMessageId);
+    if (assistantMessage && !assistantMessage.content) {
+      messages.value = messages.value.filter((item) => item.id !== streamMessageId);
+    } else if (assistantMessage) {
+      assistantMessage.streaming = false;
+    }
     error.value = '发送失败，请检查网络和后端服务。';
   } finally {
     sending.value = false;
@@ -123,37 +139,39 @@ async function scrollToBottom() {
 
       <div
         v-for="(message, index) in messages"
-        :key="`${message.role}-${index}-${message.content}`"
+        :key="message.id || `${message.role}-${index}-${message.content}`"
         class="chat-msg"
         :class="message.role === 'user' ? 'user' : 'assistant'"
       >
         <span class="chat-avatar">{{ message.role === 'user' ? 'Me' : 'AI' }}</span>
-        <div class="chat-bubble" :class="message.role === 'user' ? 'user-bubble' : 'assistant-bubble'">
+        <div
+          v-if="message.role !== 'intake_card'"
+          class="chat-bubble"
+          :class="message.role === 'user' ? 'user-bubble' : 'assistant-bubble'"
+        >
           {{ message.content }}
+          <span v-if="message.streaming && !message.content" class="chat-stream-waiting">...</span>
+          <span v-else-if="message.streaming" class="chat-stream-cursor" aria-hidden="true">▍</span>
         </div>
-      </div>
-
-      <div v-for="(parsed, index) in parsedIntakes" :key="`parsed-${index}`" class="chat-msg assistant">
-        <span class="chat-avatar">AI</span>
-        <div class="chat-bubble assistant-bubble">
-          <strong>已识别饮品信息，并填入表单。</strong>
-          <p class="chat-parse-hint">确认无误后，可添加到当天摄入记录。</p>
+        <div v-else class="chat-bubble assistant-bubble intake-card-bubble">
+          <strong>{{ message.parsed.submitted ? '已添加到当天摄入记录。' : '已识别饮品信息，并填入表单。' }}</strong>
+          <p v-if="!message.parsed.submitted" class="chat-parse-hint">确认无误后，可添加到当天摄入记录。</p>
           <div class="chat-parse-summary">
-            <span>名称：{{ getParsedName(parsed) }}</span>
-            <span>容量：{{ getParsedVolume(parsed) }}{{ getParsedVolume(parsed) === '-' ? '' : ' ml' }}</span>
-            <span>甜度：{{ getParsedSugar(parsed) }}</span>
+            <span>名称：{{ getParsedName(message.parsed) }}</span>
+            <span>容量：{{ getParsedVolume(message.parsed) }}{{ getParsedVolume(message.parsed) === '-' ? '' : ' ml' }}</span>
+            <span>甜度：{{ getParsedSugar(message.parsed) }}</span>
           </div>
           <button
             type="button"
             class="chat-add-log-btn"
-            :disabled="parsed.submitted"
-            @click="addParsedIntake(parsed)"
+            :disabled="message.parsed.submitted"
+            @click="addParsedIntake(message.parsed)"
           >
-            {{ parsed.submitted ? '已提交' : '添加到当天摄入记录' }}
+            {{ message.parsed.submitted ? '已添加' : '添加到当天摄入记录' }}
           </button>
           <details class="chat-structured-details">
             <summary>技术详情 JSON</summary>
-            <pre class="chat-json">{{ JSON.stringify(parsed, null, 2) }}</pre>
+            <pre class="chat-json">{{ JSON.stringify(message.parsed, null, 2) }}</pre>
           </details>
         </div>
       </div>
@@ -236,5 +254,17 @@ async function scrollToBottom() {
   color: #c24141;
   font-size: 0.85rem;
   text-align: center;
+}
+
+.chat-stream-waiting,
+.chat-stream-cursor {
+  display: inline-block;
+  animation: chat-stream-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes chat-stream-pulse {
+  50% {
+    opacity: 0.25;
+  }
 }
 </style>

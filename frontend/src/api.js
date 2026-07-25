@@ -1,4 +1,7 @@
-const API_BASE = 'http://localhost:8000';
+// Use same-origin requests by default. During local development Vite proxies
+// /api to FastAPI; in Docker, Nginx proxies /api to the backend container.
+// VITE_API_BASE_URL remains available for deployments that use separate hosts.
+const API_BASE = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export async function fetchLogsApi() {
   const response = await fetch(`${API_BASE}/api/logs`);
@@ -86,6 +89,48 @@ export async function sendChatMessageApi(date, message) {
   });
   if (!response.ok) throw new Error('Failed to send chat message');
   return response.json();
+}
+
+export async function sendChatMessageStreamApi(date, message, onEvent) {
+  const response = await fetch(`${API_BASE}/api/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    },
+    body: JSON.stringify({ date, message })
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to send chat message'));
+  if (!response.body) throw new Error('Streaming is not supported by this browser');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result = null;
+
+  async function consumeBlock(block) {
+    const data = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n');
+    if (!data) return;
+    const event = JSON.parse(data);
+    if (event.type === 'done') result = event.data;
+    await onEvent?.(event);
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const blocks = buffer.split(/\r?\n\r?\n/);
+    buffer = blocks.pop() || '';
+    for (const block of blocks) await consumeBlock(block);
+    if (done) break;
+  }
+  if (buffer.trim()) await consumeBlock(buffer);
+  if (!result) throw new Error('Chat stream ended before completion');
+  return result;
 }
 
 export async function parseIntakeApi(date, message) {

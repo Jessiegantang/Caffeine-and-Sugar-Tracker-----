@@ -1,4 +1,5 @@
-﻿const API_BASE = 'http://127.0.0.1:8000';
+﻿// Vite (local development) and Nginx (Docker) both proxy /api to the backend.
+const API_BASE = '';
 
 let database = null;
 

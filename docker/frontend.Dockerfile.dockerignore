@@ -1,0 +1,16 @@
+.git/
+.codex/
+.codex_work/
+docs/
+backend/
+
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+frontend/npm-debug.log*
+
+*.difypkg
+*.docx
+*.pdf
+*.log

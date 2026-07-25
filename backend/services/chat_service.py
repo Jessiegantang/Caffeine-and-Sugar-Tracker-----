@@ -4,7 +4,12 @@ import uuid
 from agents.intake_parser import parse_intake_with_fallback
 from agents.orchestrator import run_agent_orchestrator
 from db.database import ChatLog, DrinkLog, SleepRecord
-from services.dify_companion_service import DifyCompanionError, dify_available, generate_dify_turn
+from services.dify_companion_service import (
+    DifyCompanionError,
+    dify_available,
+    generate_dify_turn,
+    stream_dify_companion_turn,
+)
 from services.memory_service import apply_memory_updates, extract_memory_updates
 from services.trace_service import save_agent_trace
 
@@ -82,7 +87,7 @@ def complete_pending_intake(
     return parsed_intake, intake_provider
 
 
-def send_chat_message(db, input_data) -> dict:
+def _begin_chat_turn(db, input_data) -> tuple[list[dict], dict]:
     user_log = ChatLog(
         date=input_data.date,
         role="user",
@@ -95,15 +100,10 @@ def send_chat_message(db, input_data) -> dict:
     logs = db.query(ChatLog).filter(ChatLog.date == input_data.date).order_by(ChatLog.timestamp).all()
     history = [serialize_chat_log(log) for log in logs[:-1]]
     context = build_companion_context(db, input_data.date)
+    return history, context
 
-    dify_turn = None
-    fallback_reason = None
-    if dify_available():
-        try:
-            dify_turn = generate_dify_turn(input_data.message, history, context)
-        except DifyCompanionError as error:
-            fallback_reason = error.code
 
+def _complete_chat_turn(db, input_data, dify_turn, fallback_reason) -> dict:
     agent_state = None
     nutrition_result = None
     risk_result = None
@@ -128,6 +128,8 @@ def send_chat_message(db, input_data) -> dict:
             memory_updates = extract_memory_updates(input_data.message, "ask_advice", None, db)
     else:
         provider = "local"
+        logs = db.query(ChatLog).filter(ChatLog.date == input_data.date).order_by(ChatLog.timestamp).all()
+        history = [serialize_chat_log(log) for log in logs[:-1]]
         parsed_intake, intake_provider = parse_intake_with_fallback(input_data.message)
         parsed_intake, intake_provider = complete_pending_intake(
             history,
@@ -194,3 +196,40 @@ def send_chat_message(db, input_data) -> dict:
         "risk_result": risk_result,
         "trace_id": trace_state["trace_id"],
     }
+
+
+def send_chat_message(db, input_data) -> dict:
+    history, context = _begin_chat_turn(db, input_data)
+
+    dify_turn = None
+    fallback_reason = None
+    if dify_available():
+        try:
+            dify_turn = generate_dify_turn(input_data.message, history, context)
+        except DifyCompanionError as error:
+            fallback_reason = error.code
+
+    return _complete_chat_turn(db, input_data, dify_turn, fallback_reason)
+
+
+def stream_chat_message(db, input_data):
+    history, context = _begin_chat_turn(db, input_data)
+    dify_turn = None
+    fallback_reason = None
+    emitted_answer = False
+
+    if dify_available():
+        try:
+            for event in stream_dify_companion_turn(input_data.message, history, context):
+                if event["type"] == "complete":
+                    dify_turn = event["turn"]
+                    continue
+                emitted_answer = True
+                yield event
+        except DifyCompanionError as error:
+            fallback_reason = error.code
+
+    result = _complete_chat_turn(db, input_data, dify_turn, fallback_reason)
+    if dify_turn is None or not emitted_answer:
+        yield {"type": "replace", "text": result["response"]}
+    yield {"type": "done", "data": result}

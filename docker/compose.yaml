@@ -1,0 +1,41 @@
+name: drinkmind
+
+services:
+  backend:
+    image: drinkmind-backend:local
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: sqlite:////data/drinks.db
+      CHROMA_PERSIST_DIR: /data/chroma_db
+      CORS_ALLOW_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173
+      DIFY_BASE_URL: http://host.docker.internal:8081/v1
+    volumes:
+      - drinkmind_data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  frontend:
+    image: drinkmind-frontend:local
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  drinkmind_data:

@@ -100,7 +100,7 @@ CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 ```env
 COMPANION_PROVIDER=dify
-DIFY_BASE_URL=https://api.dify.ai/v1
+DIFY_BASE_URL=http://localhost:8081/v1
 DIFY_API_KEY=your_dify_app_api_key
 DIFY_USER_ID=drinkmind-local-user
 DIFY_TIMEOUT_SECONDS=60
@@ -157,6 +157,48 @@ http://localhost:5173
 ```powershell
 .\scripts\start_demo.ps1
 ```
+
+## Docker 一键启动
+
+容器配置统一放在项目根目录的 `docker/` 文件夹中。先启动 Docker Desktop，并确认
+`backend/.env` 已配置好需要使用的模型和 Dify 密钥，然后在项目根目录运行：
+
+```powershell
+.\docker\start.ps1
+```
+
+第一次构建需要下载 Python、Node、Nginx 基础镜像并安装依赖，耗时会明显长于后续构建。
+启动脚本会分别构建前后端镜像，再交给 Compose 启动，从而兼容包含中文字符的 Windows
+项目路径。
+Compose 项目在 Docker Desktop 中显示为 `drinkmind`。容器内会通过
+`http://host.docker.internal:8081/v1` 访问宿主机上的本地 Dify；直接运行后端时仍使用
+`backend/.env` 中的 `http://localhost:8081/v1`。
+启动完成后访问：
+
+```text
+前端：http://localhost:8080
+FastAPI 文档：http://localhost:8000/docs
+```
+
+常用维护命令：
+
+```powershell
+# 查看前后端容器和健康状态
+docker compose -f docker/compose.yaml ps
+
+# 持续查看日志，按 Ctrl+C 退出日志查看
+docker compose -f docker/compose.yaml logs -f
+
+# 停止并删除容器，保留饮品数据库和 Chroma 数据
+docker compose -f docker/compose.yaml down
+
+# 修改依赖、源码或 Dockerfile 后重新构建并启动
+.\docker\start.ps1
+```
+
+Compose 会把 SQLite 数据库和 Chroma 向量库保存到 `drinkmind_data` 持久化卷。
+不要在需要保留数据时运行 `docker compose -f docker/compose.yaml down -v`，因为
+`-v` 会同时删除该数据卷。
 
 ## 测试与评估
 
